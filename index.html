@@ -3,249 +3,256 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Murim Cultivator — an idle text RPG</title>
+<title>Murim Cultivator — an idle wuxia RPG</title>
+<script>
+/* Pre-paint: dress the page before first render. No logic, just prefs. */
+try {
+  var s = JSON.parse(localStorage.getItem("murim_v2") || "null");
+  var ui = (s && s.ui) || {};
+  var st = (s && s.settings) || {};
+  var theme = ui.theme || st.theme || ((window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) ? "night" : "day");
+  var size = ui.textSize || st.textSize || "m";
+  var fs = { s: "14px", m: "16px", l: "18px" }[size] || "16px";
+  document.documentElement.style.fontSize = fs;
+  document.addEventListener("DOMContentLoaded", function () {
+    document.body.dataset.theme = theme === "night" ? "night" : "day";
+  });
+} catch (e) {}
+</script>
 <link rel="stylesheet" href="style.css" />
 </head>
-<body data-theme="parchment" data-textsize="m">
+<body data-theme="day">
 <div id="app">
 
-  <!-- First panel: the name -->
+  <!-- Title menu -->
   <section id="screen-user" class="screen active" aria-labelledby="userTitle">
-    <div class="masthead">
-      <p class="kicker">A Xianxia idle text RPG</p>
-      <h1 id="userTitle"><span class="seal" aria-hidden="true"></span>Murim Cultivator</h1>
-      <p class="lede">The mountain does the waiting. You do the becoming.<br />An idle story of gathering, forging, and slaying — told in text.</p>
+    <div class="menubg" aria-hidden="true"><div class="menushade"></div></div>
+    <div class="menupanel frame">
+      <div class="carve"><span class="seal" aria-hidden="true"></span><span>A xianxia idle RPG</span></div>
+      <h1 id="userTitle" class="gametitle">Murim Cultivator</h1>
+      <p class="tagline">Gather. Forge. Slay. Be reborn.</p>
+      <form id="nameForm" novalidate>
+        <label class="field" for="inName">Name your cultivator</label>
+        <input id="inName" maxlength="16" placeholder="e.g. Nameless" autocomplete="off" aria-describedby="userErr hasSave" />
+        <p id="userErr" class="err" role="alert"></p>
+        <p class="btnrow">
+          <button type="button" id="btnContinue" class="btn" hidden>Continue</button>
+          <button type="submit" id="btnToPath" class="btn btn-primary btn-big">New journey</button>
+        </p>
+        <p class="dim small" id="hasSave"></p>
+      </form>
     </div>
-    <form id="nameForm" class="sheet narrow" novalidate>
-      <label class="field-label" for="inName">Your cultivator's name</label>
-      <input id="inName" maxlength="16" placeholder="e.g. Nameless" autocomplete="off" aria-describedby="userErr hasSave" />
-      <p id="userErr" class="err" role="alert"></p>
-      <p class="btnrow">
-        <button type="button" id="btnContinue" class="btn" hidden>Continue</button>
-        <button type="submit" id="btnToPath" class="btn primary">Begin anew</button>
-      </p>
-      <p class="dim" id="hasSave"></p>
-    </form>
   </section>
 
-  <!-- Second panel: the path -->
+  <!-- Path menu -->
   <section id="screen-path" class="screen" aria-labelledby="pathTitle">
-    <div class="narrow">
-      <p class="kicker">Second of three pages</p>
+    <div class="menubg" aria-hidden="true"><div class="menushade"></div></div>
+    <div class="menupanel frame wide">
+      <div class="carve"><span class="seal" aria-hidden="true"></span><span>Second page</span></div>
       <h2 id="pathTitle">Choose a path, <span id="pathNameEcho"></span></h2>
-      <p class="dim">One road, kept for the whole life. Each walks differently; none walks alone to the summit. Keys 1–4 choose, Enter begins.</p>
-      <div class="pathrow" id="pathRow" role="radiogroup" aria-label="Cultivation paths"></div>
+      <p class="dim">One road for the whole life. Keys 1–4 choose, Enter begins.</p>
+      <div class="pathgrid" id="pathRow" role="radiogroup" aria-label="Cultivation paths"></div>
       <p id="pathErr" class="err" role="alert"></p>
       <p class="btnrow">
         <button type="button" id="btnBackUser" class="btn">Back</button>
-        <button type="button" id="btnToGame" class="btn primary" disabled title="Choose a path first">Enter the mountain</button>
+        <button type="button" id="btnToGame" class="btn btn-primary btn-big" disabled>Enter the mountain</button>
       </p>
     </div>
   </section>
 
-  <!-- Third panel: the whole game -->
-  <section id="screen-main" class="screen" aria-label="Main game">
-    <header class="topbar">
-      <div class="who">
-        <h2><span class="seal" aria-hidden="true"></span><span id="whoName">—</span></h2>
-        <p class="dim"><span id="whoPath">—</span> · <span id="whoRealm">—</span></p>
+  <!-- The game screen -->
+  <section id="screen-main" class="screen" aria-label="Game">
+    <header class="hud frame">
+      <div class="hud-left">
+        <div class="portrait" id="portrait" aria-hidden="true"></div>
+        <div class="who">
+          <div class="name" id="hudName">—</div>
+          <div class="sub smallcaps" id="hudSub">—</div>
+        </div>
+        <button type="button" id="btnJournal" class="btn btn-small only-narrow">Journal</button>
       </div>
-      <div class="vitals" role="group" aria-label="Vital energies">
-        <div class="vital" data-tip="Health. Rest it with herbs, pills, or patience. Death only costs cultivation, never the road.">
-          <span class="vlabel">HP <b id="hpNum">–</b></span>
-          <span class="stroke" id="hpStroke" role="progressbar" aria-label="Health"><i></i></span>
-        </div>
-        <div class="vital" data-tip="Qi. Spent on burst strikes; refills while you circulate.">
-          <span class="vlabel">Qi <b id="qiNum">–</b></span>
-          <span class="stroke" id="qiStroke" role="progressbar" aria-label="Qi"><i></i></span>
-        </div>
-        <div class="vital" data-tip="Cultivation. Fill the measure, then break through to the next stage.">
-          <span class="vlabel">Cultivation <b id="cultNum">–</b></span>
-          <span class="stroke" id="cultStroke" role="progressbar" aria-label="Cultivation"><i></i></span>
+      <div class="hud-bars" role="group" aria-label="Vital energies">
+        <div class="bar hp" id="barHp" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i><b id="hpIn">–</b></div>
+        <div class="bar qi" id="barQi" role="progressbar" aria-label="Qi" aria-valuemin="0" aria-valuemax="20" aria-valuenow="20"><i></i><b id="qiIn">–</b></div>
+        <div class="bar cult" id="barCult" role="progressbar" aria-label="Cultivation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i><b id="cultIn">–</b></div>
+      </div>
+      <div class="hud-right">
+        <div class="chips" id="curChips" aria-label="Currencies"></div>
+        <div class="chips small" id="statChips" aria-label="Combat stats"></div>
+        <div class="hudbtns">
+          <button type="button" id="btnPauseChip" class="chipbtn" data-tip="Still the world. The idle tick stops.">Pause</button>
+          <button type="button" id="btnHelp" class="chipbtn" data-tip="How the mountain works, in six lines.">Help</button>
         </div>
       </div>
-      <p class="goal" id="goalLine" title="Your nearest sensible ambition">—</p>
     </header>
 
-    <p id="hintBar" class="hint" hidden><span id="hintText"></span>
-      <button type="button" id="btnHintOff" class="linklike">Dismiss</button>
-    </p>
+    <button type="button" id="goalStrip" class="goalstrip frame">
+      <span class="seal" aria-hidden="true"></span>
+      <span class="smallcaps">Next</span>
+      <span id="goalText">—</span>
+    </button>
 
-    <nav class="menurow" role="tablist" aria-label="Panels">
-      <button type="button" data-m="cult" role="tab" aria-selected="true" data-tip="Circulate, meditate, break through (key 1)"><span class="key" aria-hidden="true">1</span> Cultivate</button>
-      <button type="button" data-m="gather" role="tab" aria-selected="false" data-tip="Herbs, iron, timber, cores (key 2)"><span class="key" aria-hidden="true">2</span> Gather</button>
-      <button type="button" data-m="forge" role="tab" aria-selected="false" data-tip="Forge arms and pills (key 3)"><span class="key" aria-hidden="true">3</span> Forge</button>
-      <button type="button" data-m="fight" role="tab" aria-selected="false" data-tip="Hunt the wastes (key 4)"><span class="key" aria-hidden="true">4</span> Fight</button>
-      <button type="button" data-m="boss" role="tab" aria-selected="false" data-tip="One tyrant per realm, and the tower (key 5)"><span class="key" aria-hidden="true">5</span> Boss</button>
-      <button type="button" data-m="skills" role="tab" aria-selected="false" data-tip="Techniques, bought with stones and seeds (key 6)"><span class="key" aria-hidden="true">6</span> Skills</button>
-      <button type="button" data-m="char" role="tab" aria-selected="false" data-tip="The cultivator, and rebirth (key 7)"><span class="key" aria-hidden="true">7</span> Character</button>
-      <button type="button" data-m="settings" role="tab" aria-selected="false" data-tip="Theme, size, sound, saves (key 8)"><span class="key" aria-hidden="true">8</span> Settings</button>
-      <span class="clock"><span id="tickN">0m 00s</span> gone
-        <button type="button" id="btnPause" data-tip="Still the world (pauses the idle tick)">Pause</button></span>
-    </nav>
-
-    <div class="cols">
-      <div class="col-main">
-        <div class="scenebox">
-          <pre id="scene" class="scene" aria-label="Side-view text scene"></pre>
+    <div class="midgrid">
+      <div class="stagecol">
+        <div class="stagewrap frame">
+          <div class="carve"><span class="seal" aria-hidden="true"></span><span id="stageTitle">Azure Hills</span></div>
+          <div id="stageMount" class="stage" role="img" aria-label="The mountain at dawn"></div>
+          <div id="foePlate" hidden><b>—</b><div class="foehp" role="progressbar" aria-label="Foe health"><i></i></div></div>
           <div id="floats" aria-hidden="true"></div>
-        </div>
-
-        <div id="m-cult" class="sub active" role="tabpanel" aria-label="Cultivate">
-          <h3>Cultivate</h3>
-          <p class="primaryrow"><button type="button" id="btnBreak" class="btn primary" data-tip="Spend a full measure for the next stage. Failure keeps 60% and grows pity.">Break through</button>
-            <span id="doorT" class="dim"></span></p>
-          <p id="cultInfo" class="dim"></p>
-          <p class="dim rates" id="rateLine"></p>
-          <p>Attention rests on
-            <select id="focus" data-tip="Circulate: a quarter more cultivation. Sense: near a third more gathering. Temper: harder strikes.">
-              <option value="cult">circulating qi</option>
-              <option value="gather">sensing herbs</option>
-              <option value="fight">tempering the body</option>
-            </select>
-          </p>
-          <p class="toggles">
-            <label data-tip="Gain cultivation every second, even untouched."><input type="checkbox" id="optCult" checked /> self-circulation</label>
-            <label data-tip="Attempt breakthrough the moment the measure fills."><input type="checkbox" id="optBreak" checked /> breakthrough unasked</label>
-          </p>
-          <p class="btnrow">
-            <button type="button" id="btnMed" class="btn" data-tip="A breath's work: three seconds of idle gain, at once.">Meditate</button>
-            <button type="button" id="btnDoor" class="btn" data-tip="Thirty seconds behind a closed door at triple gain. Gathering waits outside.">Closed door, 30 breaths</button>
-          </p>
-          <details class="help">
-            <summary>How the mountain works, in six lines</summary>
-            <ol>
-              <li>Cultivation fills on its own; breakthroughs carry you upward.</li>
-              <li>Gathering fills the pouch; the forge turns it into arms.</li>
-              <li>Arms let you survive stronger foes and tyrants.</li>
-              <li>Tyrants and the tower pay stones; stones buy techniques.</li>
-              <li>At Dao Ascension you may be reborn for Dao Seeds.</li>
-              <li>Then it all begins again, faster, and further.</li>
-            </ol>
-          </details>
-        </div>
-
-        <div id="m-gather" class="sub" role="tabpanel" aria-label="Gather">
-          <h3>Gather</h3>
-          <p class="toggles"><label data-tip="Each ground yields its own slow tithe, every second."><input type="checkbox" id="optGather" checked /> unattended hands</label></p>
-          <div id="nodes"></div>
-        </div>
-
-        <div id="m-forge" class="sub" role="tabpanel" aria-label="Forge">
-          <h3>Forge</h3>
-          <p class="dim">A red mark means the price is in hand. Gear shows what changes before and after.</p>
-          <div id="recipes"></div>
-        </div>
-
-        <div id="m-fight" class="sub" role="tabpanel" aria-label="Fight">
-          <h3>Fight</h3>
-          <p class="toggles">
-            <label data-tip="Repeat the same foe after each victory, while hale."><input type="checkbox" id="optFight" /> revisiting victories</label>
-            <label data-tip="Eat a herb when health falls below two-fifths."><input type="checkbox" id="optHeal" checked /> herbs when bleeding</label>
-          </p>
-          <div id="foes"></div>
-          <h3>The present battle</h3>
-          <p id="battleLine">No battle. Choose a foe above.</p>
-          <p class="btnrow">
-            <button type="button" id="btnHit" class="btn primary" data-tip="One exchange of blows (key A).">Strike</button>
-            <button type="button" id="btnBurst" class="btn" data-tip="Ten qi for a heavy exchange (key Q).">Qi burst, 10 qi</button>
-            <button type="button" id="btnFlee" class="btn quiet" data-tip="Leave living (key F).">Withdraw</button>
-          </p>
-        </div>
-
-        <div id="m-boss" class="sub" role="tabpanel" aria-label="Boss">
-          <h3>Tyrants, one per realm</h3>
-          <div id="bosses"></div>
-          <h3>The tower <span class="dim">— floor <span id="towerNum">0</span> cleared</span></h3>
-          <p class="toggles"><label data-tip="Climb onward after each cleared floor, while hale and set to revisit victories."><input type="checkbox" id="optTower" /> climbing unasked</label></p>
-          <div id="towerBox"></div>
-        </div>
-
-        <div id="m-skills" class="sub" role="tabpanel" aria-label="Skills">
-          <h3>Techniques</h3>
-          <p class="dim">Learn downward; each step needs the one above. Stones fall from kills; Dao Seeds from rebirth. Stones <b id="skStones">0</b> · Seeds <b id="skSeeds">0</b>.</p>
-          <div id="skills"></div>
-        </div>
-
-        <div id="m-char" class="sub" role="tabpanel" aria-label="Character">
-          <h3>The cultivator</h3>
-          <dl id="charBox" class="record"></dl>
-          <p class="btnrow">
-            <button type="button" id="btnEat" class="btn" data-tip="Chew one herb: 25 health.">Eat a herb</button>
-            <button type="button" id="btnPill" class="btn" data-tip="Swallow a pill: full qi and cultivation.">Take a pill</button>
-            <button type="button" id="btnSave" class="btn" data-tip="Write the record to the shelf at once.">Record now</button>
-            <span id="saveMsg" class="dim" role="status"></span>
-          </p>
-          <div id="rebirthBox"></div>
-        </div>
-
-        <div id="m-settings" class="sub" role="tabpanel" aria-label="Settings">
-          <h3>Settings</h3>
-          <div class="setgrid">
-            <label>Pages’ dress
-              <select id="setTheme" data-tip="Parchment by daylight, dark lacquer by night.">
-                <option value="parchment">Parchment</option>
-                <option value="night">Night lacquer</option>
-              </select></label>
-            <label>Letter size
-              <select id="setText" data-tip="Small, common, or large letters. No reloading.">
-                <option value="s">Small</option>
-                <option value="m">Common</option>
-                <option value="l">Large</option>
-              </select></label>
-            <label>Number manner
-              <select id="setNum" data-tip="Full tallies, or shortened: 1.2K, 3.4M.">
-                <option value="compact">Shortened</option>
-                <option value="full">Full</option>
-              </select></label>
-            <label>Shelf record every
-              <select id="setAutosave" data-tip="How often the record writes itself.">
-                <option value="5">5 breaths</option>
-                <option value="15">15 breaths</option>
-                <option value="30">30 breaths</option>
-                <option value="60">60 breaths</option>
-              </select></label>
-            <label data-tip="Small chimes for forging, victories, ascensions."><input type="checkbox" id="setSound" checked /> quiet chimes</label>
-            <label data-tip="Still all drifting numbers and eased strokes."><input type="checkbox" id="setMotion" /> stillness (reduced motion)</label>
+          <div id="banner" class="banner" hidden></div>
+          <div id="pausedVeil" class="pausedveil" hidden>Paused</div>
+          <div id="tipBubble" class="tipbubble" hidden>
+            <span id="tipText"></span>
+            <span class="tipbtns"><button type="button" id="tipSkip" class="btn btn-small">Skip tips</button></span>
           </div>
-          <h3>The record, carried elsewhere</h3>
-          <p><textarea id="saveBox" rows="3" cols="60" aria-label="Save string" placeholder="The exported record appears here; paste one to return it."></textarea></p>
-          <p class="btnrow"><button type="button" id="btnExp" class="btn">Copy the record out</button>
-            <button type="button" id="btnImp" class="btn">Bring a record in</button></p>
-          <h3>Danger</h3>
-          <p class="dim">Shattering ends this life entirely. To be certain, write <b>sever</b> below.</p>
-          <p class="btnrow"><input id="wipeWord" maxlength="16" placeholder="sever" autocomplete="off" aria-label="Type sever to confirm" />
-            <button type="button" id="btnWipe" class="btn danger" disabled>Shatter this life</button></p>
+        </div>
+
+        <div class="actionbar frame" role="toolbar" aria-label="Actions">
+          <button type="button" id="actPrimary" class="btn btn-primary btn-big">Meditate</button>
+          <button type="button" id="actBurst" class="btn" data-tip="Ten qi for a heavy exchange. Key Q.">Qi burst</button>
+          <button type="button" id="actDoor" class="btn doorfill" data-tip="Thirty breaths behind a closed door at triple gain."><i></i><b>Closed door</b></button>
+          <button type="button" id="actEat" class="btn" data-tip="Chew one herb for 25 health. Key E.">Eat herb</button>
+          <button type="button" id="actPill" class="btn" data-tip="Swallow a pill: full qi and cultivation.">Pill</button>
+          <button type="button" id="actFlee" class="btn btn-quiet" hidden>Withdraw</button>
+        </div>
+        <div class="autobar frame" role="group" aria-label="Unattended work">
+          <label class="switch"><input type="checkbox" id="optCult" checked /><span>Cultivate</span><b>On</b></label>
+          <label class="switch"><input type="checkbox" id="optBreak" checked /><span>Breakthrough</span><b>On</b></label>
+          <label class="switch"><input type="checkbox" id="optGather" checked /><span>Gather</span><b>On</b></label>
+          <label class="switch"><input type="checkbox" id="optFight" /><span>Re-fight</span><b>Off</b></label>
+          <label class="switch"><input type="checkbox" id="optHeal" checked /><span>Herbs</span><b>Off</b></label>
+        </div>
+
+        <nav class="tabs frame" role="tablist" aria-label="Panels">
+          <button type="button" data-m="cult" role="tab" aria-selected="true" aria-controls="m-cult" id="tab-cult"><span class="key" aria-hidden="true">1</span> Cultivate</button>
+          <button type="button" data-m="gather" role="tab" aria-selected="false" aria-controls="m-gather" id="tab-gather"><span class="key" aria-hidden="true">2</span> Gather</button>
+          <button type="button" data-m="forge" role="tab" aria-selected="false" aria-controls="m-forge" id="tab-forge"><span class="key" aria-hidden="true">3</span> Forge</button>
+          <button type="button" data-m="fight" role="tab" aria-selected="false" aria-controls="m-fight" id="tab-fight"><span class="key" aria-hidden="true">4</span> Fight</button>
+          <button type="button" data-m="boss" role="tab" aria-selected="false" aria-controls="m-boss" id="tab-boss"><span class="key" aria-hidden="true">5</span> Boss</button>
+          <button type="button" data-m="skills" role="tab" aria-selected="false" aria-controls="m-skills" id="tab-skills"><span class="key" aria-hidden="true">6</span> Skills</button>
+          <button type="button" data-m="char" role="tab" aria-selected="false" aria-controls="m-char" id="tab-char"><span class="key" aria-hidden="true">7</span> Character</button>
+          <button type="button" data-m="settings" role="tab" aria-selected="false" aria-controls="m-settings" id="tab-settings"><span class="key" aria-hidden="true">8</span> Settings</button>
+        </nav>
+
+        <div class="panelwrap frame">
+          <div id="m-cult" class="sub active" role="tabpanel" aria-labelledby="tab-cult">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Cultivate</span></div>
+            <div class="focusrow" role="radiogroup" aria-label="Attention">
+              <label class="focuscard"><input type="radio" name="focus" value="cult" checked /><b>Circulate Qi</b><span>A quarter more cultivation.</span></label>
+              <label class="focuscard"><input type="radio" name="focus" value="gather" /><b>Sense Herbs</b><span>Near a third more gathering.</span></label>
+              <label class="focuscard"><input type="radio" name="focus" value="fight" /><b>Temper Body</b><span>Harder strikes, richer kills.</span></label>
+            </div>
+            <div class="chips" id="rateChips"></div>
+            <p class="dim" id="cultInfo"></p>
+            <p class="dim" id="doorLine" hidden></p>
+          </div>
+
+          <div id="m-gather" class="sub" role="tabpanel" aria-labelledby="tab-gather">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Gather</span></div>
+            <div class="cards" id="nodes"></div>
+          </div>
+
+          <div id="m-forge" class="sub" role="tabpanel" aria-labelledby="tab-forge">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Forge</span></div>
+            <div class="cards" id="recipes"></div>
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Worn arms</span></div>
+            <div class="cards" id="gearCards"></div>
+          </div>
+
+          <div id="m-fight" class="sub" role="tabpanel" aria-labelledby="tab-fight">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Fight</span></div>
+            <div class="cards" id="foes"></div>
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>The present battle</span></div>
+            <p id="battleLine">No battle. Choose a foe above, or climb the tower.</p>
+          </div>
+
+          <div id="m-boss" class="sub" role="tabpanel" aria-labelledby="tab-boss">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Tyrants, one per realm</span></div>
+            <div class="cards" id="bosses"></div>
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>The tower · floor <span id="towerNum">0</span></span></div>
+            <p><label class="switch"><input type="checkbox" id="optTower" /><span>Climb unasked</span><b>Off</b></label></p>
+            <div class="cards" id="towerBox"></div>
+          </div>
+
+          <div id="m-skills" class="sub" role="tabpanel" aria-labelledby="tab-skills">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Techniques</span></div>
+            <p class="dim">Stones <b id="skStones">0</b> · Seeds <b id="skSeeds">0</b>. Each step needs the one above.</p>
+            <div id="skillDetail" class="detail" hidden></div>
+            <svg id="treeLines" aria-hidden="true"></svg>
+            <div id="skills"></div>
+          </div>
+
+          <div id="m-char" class="sub" role="tabpanel" aria-labelledby="tab-char">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>The cultivator</span></div>
+            <div class="chargrid">
+              <div class="eqcol">
+                <div class="slot" id="eqWeapon" data-tip="Weapon. Forged arms land here."><span class="slotname">Weapon</span><b>bare hands</b></div>
+                <div class="charsvg" id="charSvg" aria-hidden="true"></div>
+                <div class="slot" id="eqArmor" data-tip="Armor. Robes and plates land here."><span class="slotname">Armor</span><b>rags</b></div>
+                <div class="slot" id="eqCharm" data-tip="Charm. Jade and seals land here."><span class="slotname">Charm</span><b>none</b></div>
+              </div>
+              <dl id="charStats" class="record"></dl>
+            </div>
+            <div class="chips" id="pouchChips"></div>
+            <div id="rebirthBox"></div>
+          </div>
+
+          <div id="m-settings" class="sub" role="tabpanel" aria-labelledby="tab-settings">
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Display</span></div>
+            <div class="setgrid">
+              <label>Theme
+                <select id="setTheme"><option value="day">Day wash</option><option value="night">Night lacquer</option></select></label>
+              <label>Letter size
+                <select id="setText"><option value="s">Small 14</option><option value="m">Medium 16</option><option value="l">Large 18</option></select></label>
+              <label class="switch"><input type="checkbox" id="setMotion" /><span>Reduce motion</span><b>Off</b></label>
+              <label class="switch"><input type="checkbox" id="setSound" /><span>Sound</span><b>Off</b></label>
+            </div>
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>The record</span></div>
+            <p class="dim" id="autosaveNote">The record writes itself every 5 breaths.</p>
+            <p class="btnrow">
+              <button type="button" id="btnSave" class="btn">Record now</button>
+              <button type="button" id="btnExp" class="btn">Copy it out</button>
+              <button type="button" id="btnImp" class="btn">Bring one in</button>
+              <span id="saveMsg" class="dim" role="status"></span>
+            </p>
+            <p><textarea id="saveBox" rows="3" cols="60" aria-label="Save string" placeholder="The exported record appears here."></textarea></p>
+            <div class="carve"><span class="seal" aria-hidden="true"></span><span>Danger</span></div>
+            <p class="dim">Shattering ends this life entirely. Write RESET below.</p>
+            <p class="btnrow"><input id="wipeWord" maxlength="16" placeholder="RESET" autocomplete="off" aria-label="Type RESET to confirm" />
+              <button type="button" id="btnWipe" class="btn btn-danger" disabled>Shatter this life</button></p>
+          </div>
         </div>
       </div>
 
-      <aside class="col-side">
-        <section aria-label="Standing">
-          <h3>Standing</h3>
-          <dl id="statBox" class="record"></dl>
-          <h3>Pouch</h3>
-          <dl id="invBox" class="record"></dl>
-        </section>
-        <section aria-label="Chronicle">
-          <h3>Chronicle</h3>
+      <aside class="railcol" id="rail" aria-label="Journal">
+        <div class="frame railsec">
+          <div class="carve"><span class="seal" aria-hidden="true"></span><span>Standing</span></div>
+          <dl id="sideStatus" class="record"></dl>
+        </div>
+        <div class="frame railsec">
+          <div class="carve"><span class="seal" aria-hidden="true"></span><span>Pouch</span></div>
+          <div class="chips" id="sidePouch"></div>
+        </div>
+        <div class="frame railsec logsec">
+          <div class="carve"><span class="seal" aria-hidden="true"></span><span>Chronicle</span></div>
           <p class="btnrow filters" role="group" aria-label="Chronicle filter">
-            <button type="button" data-f="all" class="btn tiny on" aria-pressed="true">All</button>
-            <button type="button" data-f="combat" class="btn tiny" aria-pressed="false">Combat</button>
-            <button type="button" data-f="loot" class="btn tiny" aria-pressed="false">Loot</button>
-            <button type="button" data-f="sys" class="btn tiny" aria-pressed="false">System</button>
-            <button type="button" id="btnClear" class="btn tiny quiet">Sweep</button>
+            <button type="button" data-f="all" class="chipbtn on" aria-pressed="true">All</button>
+            <button type="button" data-f="combat" class="chipbtn" aria-pressed="false">Combat</button>
+            <button type="button" data-f="loot" class="chipbtn" aria-pressed="false">Loot</button>
+            <button type="button" data-f="sys" class="chipbtn" aria-pressed="false">System</button>
+            <button type="button" id="btnClear" class="chipbtn">Sweep</button>
           </p>
           <div id="log" aria-live="polite"></div>
-        </section>
+        </div>
       </aside>
     </div>
 
-    <footer class="foot dim">Murim Cultivator v4 · an idle text RPG · the record keeps itself · keys 1–8 turn pages</footer>
+    <footer class="foot dim">MURIM CULTIVATOR v3-phase3 · keys 1–8 turn pages · Space acts</footer>
   </section>
 
   <div id="modalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="modal">
-      <h2 id="modalTitle"></h2>
+    <div class="modal frame">
+      <div class="carve"><span class="seal" aria-hidden="true"></span><span id="modalTitle">—</span></div>
       <div id="modalBody"></div>
       <p id="modalBtns" class="btnrow"></p>
     </div>
@@ -256,6 +263,7 @@
 <script src="js/config.js"></script>
 <script src="js/formulas.js"></script>
 <script src="js/state.js"></script>
+<script src="js/stage.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/actions.js"></script>
 <script src="js/loop.js"></script>

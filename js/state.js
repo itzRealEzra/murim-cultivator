@@ -1,14 +1,23 @@
-/* MURIM CULTIVATOR -- Phase 2: state, save v3, offline gains.
+/* Murim Cultivator — state, save v5, offline gains.
    S is the only game state. Runtime-only values (battle, pause, modal
-   queue) live on MC, never in S, so saves stay serializable. */
+   queue, offline summary) live on MC, never in S, so saves stay clean. */
 var MC = window.MC || {};
 window.MC = MC;
+
+/* Display and onboarding preferences. Gameplay toggles stay in settings. */
+MC.DEFAULT_UI = function () {
+  var night = false;
+  try {
+    night = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch (e) {}
+  return { panel: "cult", theme: night ? "night" : "day", textSize: "m",
+    reduceMotion: false, hintsDone: false, logFilter: "all", sound: false };
+};
 
 MC.DEFAULT_SETTINGS = function () {
   return { focus: "cult", autoCult: true, autoBreak: true, autoGather: true,
     autoFight: false, autoHeal: true, autoTower: false,
-    theme: "parchment", textSize: "m", reduceMotion: false, numFmt: "compact",
-    autosaveSec: 5, muted: false, lastPanel: "cult", logFilter: "all" };
+    numFmt: "compact", autosaveSec: 5 };
 };
 
 MC.DEFAULT = function () {
@@ -30,44 +39,65 @@ MC.DEFAULT = function () {
     frac: { herb: 0, ore: 0, wood: 0, core: 0 },
     gear: [], equip: { weapon: null, armor: null, charm: null },
     settings: MC.DEFAULT_SETTINGS(),
-    hintsOff: false, breakthroughDone: false,
+    ui: MC.DEFAULT_UI(),
+    breakthroughDone: false,
     doorUntil: 0, elapsed: 0,
     lastSeen: Date.now(), started: false
   };
 };
 
-// v2 -> v3: seeds/skills/tower/charm-slot/gear-rarity. Old gear had no
-// rar/lvl and no charm slot; default them so old saves keep their stats.
+/* v5: display prefs move from settings into S.ui. Old keys are dropped so
+   the two copies can never disagree. Old saves load untouched otherwise. */
 MC.migrate = function (raw) {
-  const d = Object.assign(MC.DEFAULT(), raw || {});
+  var d = Object.assign(MC.DEFAULT(), raw || {});
   d.inv = Object.assign(MC.DEFAULT().inv, (raw && raw.inv) || {});
   d.frac = Object.assign(MC.DEFAULT().frac, (raw && raw.frac) || {});
   d.equip = Object.assign({ weapon: null, armor: null, charm: null }, (raw && raw.equip) || {});
-  d.settings = Object.assign(MC.DEFAULT_SETTINGS(), (raw && raw.settings) || {});
+  var oldS = (raw && raw.settings) || {};
+  d.settings = Object.assign(MC.DEFAULT_SETTINGS(), oldS);
+  delete d.settings.theme; delete d.settings.textSize; delete d.settings.reduceMotion;
+  delete d.settings.logFilter; delete d.settings.lastPanel; delete d.settings.muted;
+  var du = MC.DEFAULT_UI();
+  if (raw && raw.ui && typeof raw.ui === "object") {
+    d.ui = Object.assign(du, raw.ui);
+  } else {
+    d.ui = du;
+    if (typeof oldS.theme === "string") d.ui.theme = oldS.theme;
+    if (typeof oldS.textSize === "string") d.ui.textSize = oldS.textSize;
+    if (typeof oldS.reduceMotion === "boolean") d.ui.reduceMotion = oldS.reduceMotion;
+    if (typeof oldS.logFilter === "string") d.ui.logFilter = oldS.logFilter;
+    if (typeof oldS.lastPanel === "string") d.ui.panel = oldS.lastPanel;
+    if (typeof oldS.muted === "boolean") d.ui.sound = !oldS.muted;
+    if (raw && (raw.hintsOff === true || raw.breakthroughDone === true)) d.ui.hintsDone = true;
+  }
+  if (["cult", "gather", "forge", "fight", "boss", "skills", "char", "settings"].indexOf(d.ui.panel) < 0) {
+    d.ui.panel = "cult";
+  }
+  if (["day", "night"].indexOf(d.ui.theme) < 0) d.ui.theme = du.theme;
+  if (["s", "m", "l"].indexOf(d.ui.textSize) < 0) d.ui.textSize = "m";
   if (!Array.isArray(d.gear)) d.gear = [];
-  d.gear = d.gear.map(g => Object.assign({ rar: "common", lvl: 0 }, g));
+  d.gear = d.gear.map(function (g) { return Object.assign({ rar: "common", lvl: 0 }, g); });
   if (!Array.isArray(d.bosses)) d.bosses = [];
   if (!d.skills || typeof d.skills !== "object") d.skills = {};
-  for (const k of ["realm", "stage", "cult", "totalCult", "lifetimeCult", "pity", "seeds",
+  var nums = ["realm", "stage", "cult", "totalCult", "lifetimeCult", "pity", "seeds",
     "rebirths", "tower", "hp", "maxHp", "qi", "maxQi", "atk", "def", "spi", "gold",
-    "stones", "kills", "doorUntil", "elapsed"]) {
-    if (typeof d[k] !== "number" || isNaN(d[k])) d[k] = MC.DEFAULT()[k];
+    "stones", "kills", "doorUntil", "elapsed"];
+  for (var i = 0; i < nums.length; i++) {
+    if (typeof d[nums[i]] !== "number" || isNaN(d[nums[i]])) d[nums[i]] = MC.DEFAULT()[nums[i]];
   }
   if (typeof d.name !== "string") d.name = "";
   if (typeof d.path !== "string") d.path = "";
-  // v4 (UI pass): onboarding + display settings. Old saves start with
-  // hints on and breakthroughDone inferred from any progress.
-  if (typeof d.hintsOff !== "boolean") d.hintsOff = false;
-  if (!raw || typeof raw.breakthroughDone !== "boolean") {
+  if (typeof d.breakthroughDone !== "boolean") {
     d.breakthroughDone = (d.stage > 0 || d.realm > 0 || (d.rebirths || 0) > 0);
   }
+  delete d.hintsOff;
   d.v = MC.CONFIG.SAVE_V;
   return d;
 };
 
 MC.readStore = function () {
   try {
-    const r = localStorage.getItem(MC.CONFIG.SAVE_KEY);
+    var r = localStorage.getItem(MC.CONFIG.SAVE_KEY);
     if (!r) return MC.DEFAULT();
     return MC.migrate(JSON.parse(r));
   } catch (e) { return MC.DEFAULT(); }
@@ -78,34 +108,35 @@ MC.writeStore = function () {
   try { localStorage.setItem(MC.CONFIG.SAVE_KEY, JSON.stringify(S)); } catch (e) {}
 };
 
-// Offline gains use the same live formulas, gated by the player's own
-// auto toggles, capped at 8h. Spirit Scribes (+25%) applies if learned.
+/* Offline gains use the same live formulas, gated by the player's own
+   auto toggles, capped at 8h. Spirit Scribes (+25%) applies if learned. */
 MC.computeOffline = function () {
-  const c = MC.CONFIG;
-  const away = Math.min((Date.now() - (S.lastSeen || Date.now())) / 1000, c.OFFLINE_CAP_SEC);
+  var c = MC.CONFIG;
+  var away = Math.min((Date.now() - (S.lastSeen || Date.now())) / 1000, c.OFFLINE_CAP_SEC);
   if (!S.started || away < c.OFFLINE_MIN_SEC) return null;
-  const scribes = (S.skills && S.skills.ta4) ? 1.25 : 1;
-  const sum = { secs: Math.floor(away), cult: 0, gold: 0, mats: {} };
+  var scribes = (S.skills && S.skills.ta4) ? 1.25 : 1;
+  var sum = { secs: Math.floor(away), cult: 0, gold: 0, mats: {} };
   if (S.settings.autoCult) {
-    const wasDoor = S.doorUntil;
+    var wasDoor = S.doorUntil;
     S.doorUntil = 0; // any door active at save time expired while away
-    const gain = Math.floor(MC.cultRate() * away * scribes);
+    var gain = Math.floor(MC.cultRate() * away * scribes);
     S.doorUntil = wasDoor > Date.now() ? wasDoor : 0;
     sum.cult = gain;
     S.cult += gain;
     S.totalCult += gain;
   }
   if (S.settings.autoGather) {
-    for (const n of MC.NODES) {
-      const amt = n.rate * MC.gatherMult() * away * scribes;
-      const whole = Math.floor(amt);
+    for (var ni = 0; ni < MC.NODES.length; ni++) {
+      var n = MC.NODES[ni];
+      var amt = n.rate * MC.gatherMult() * away * scribes;
+      var whole = Math.floor(amt);
       S.frac[n.id] = (S.frac[n.id] || 0) + (amt - whole);
-      let extra = 0;
+      var extra = 0;
       while (S.frac[n.id] >= 1) { S.frac[n.id] -= 1; extra += 1; }
-      const total = whole + extra;
+      var total = whole + extra;
       if (total > 0) {
         S.inv[n.id] = (S.inv[n.id] || 0) + total;
-        const cc = Math.floor(n.cult * total * scribes);
+        var cc = Math.floor(n.cult * total * scribes);
         S.cult += cc; S.totalCult += cc;
         sum.mats[n.id] = total;
       }
@@ -122,27 +153,27 @@ MC.exportSave = function () {
 };
 
 MC.importSave = function (str) {
-  const clean = String(str || "").trim();
+  var clean = String(str || "").trim();
   if (!clean) throw new Error("empty");
-  const obj = JSON.parse(decodeURIComponent(escape(atob(clean))));
-  const m = MC.migrate(obj);
+  var obj = JSON.parse(decodeURIComponent(escape(atob(clean))));
+  var m = MC.migrate(obj);
   if (!m.started && !m.name) throw new Error("not a game save");
   S = m;
   MC.writeStore();
   return true;
 };
 
-// Reincarnation: bank this run's cult, pay out seeds, reset the run but
-// keep name/path/skills/seeds/stones. Skill-granted MaxHP is re-applied.
+/* Reincarnation: bank this run's cult, pay out seeds, reset the run but
+   keep name/path/skills/seeds/stones/ui. Skill-granted MaxHP is re-applied. */
 MC.doRebirth = function () {
-  const seeds = MC.seedsFor(S.totalCult);
+  var seeds = MC.seedsFor(S.totalCult);
   S.lifetimeCult += S.totalCult;
   S.seeds += seeds;
   S.rebirths += 1;
-  const keep = { name: S.name, path: S.path, skills: S.skills, seeds: S.seeds,
+  var keep = { name: S.name, path: S.path, skills: S.skills, seeds: S.seeds,
     rebirths: S.rebirths, lifetimeCult: S.lifetimeCult, stones: S.stones,
-    elapsed: S.elapsed, settings: S.settings };
-  const fresh = MC.DEFAULT();
+    elapsed: S.elapsed, settings: S.settings, ui: S.ui };
+  var fresh = MC.DEFAULT();
   S = Object.assign(fresh, keep);
   S.v = MC.CONFIG.SAVE_V;
   S.started = true;
@@ -161,10 +192,21 @@ MC.paused = false;
 MC.selPath = "";
 MC.posX = 4;
 MC.pendingOffline = null;
+MC.offlineSummary = null;
 MC.dirty = { lists: true };
 MC.markListsDirty = function () { MC.dirty.lists = true; };
 
-let S = MC.readStore();
-if (S.started) MC.pendingOffline = MC.computeOffline();
+var S = MC.readStore();
+if (S.started) {
+  /* Read-only hook: capture what the existing calculation produced. */
+  var rawAway = (Date.now() - (S.lastSeen || Date.now())) / 1000;
+  var produced = MC.computeOffline();
+  if (produced) {
+    MC.offlineSummary = { secs: produced.secs,
+      capped: rawAway > MC.CONFIG.OFFLINE_CAP_SEC,
+      cult: produced.cult, gold: produced.gold, mats: produced.mats };
+  }
+  MC.pendingOffline = produced;
+}
 
 MC.saveQuiet = function () { MC.writeStore(); };

@@ -1,10 +1,10 @@
-/* MURIM CULTIVATOR -- Phase 1: fixed-timestep idle loop + boot.
-   Fix 8: progress integrates real elapsed dt in 1s steps, so a throttled
-   background tab catches up instead of stalling. TICK shows S.elapsed. */
+/* Murim Cultivator — fixed-timestep idle loop + boot.
+   Progress integrates real elapsed time in 1s steps, so a throttled
+   background tab catches up instead of stalling. */
 var MC = window.MC || {};
 window.MC = MC;
 
-// One simulation second. Same order and math as the prototype loop.
+// One simulation second. Order and math unchanged.
 MC.step = function () {
   S.elapsed += 1;
   if (S.settings.autoCult) {
@@ -13,12 +13,13 @@ MC.step = function () {
   }
   if (S.elapsed % 2 === 0) S.hp = Math.min(S.maxHp, S.hp + MC.hpRegen());
   if (S.settings.autoGather) {
-    for (const n of MC.NODES) {
+    for (var i = 0; i < MC.NODES.length; i++) {
+      var n = MC.NODES[i];
       S.frac[n.id] += n.rate * MC.gatherMult();
       if (n.id === "core" && S.frac[n.id] >= 1 && MC.tAtk() < 8 && Math.random() < 0.2) {
         S.frac[n.id] = 0;
         S.hp = Math.max(1, S.hp - 8);
-        MC.log("Idle hunt wound. -8 HP.", "b");
+        MC.log("Idle hunt wound. Eight health lost.", "bad", "combat");
       } else {
         while (S.frac[n.id] >= 1) {
           S.frac[n.id] -= 1;
@@ -36,29 +37,29 @@ MC.step = function () {
   if (S.settings.autoHeal && S.hp < S.maxHp * 0.4 && S.inv.herb > 0) {
     S.inv.herb--;
     S.hp = Math.min(S.maxHp, S.hp + 25);
-    MC.log("Auto-ate herb. +25 HP.");
+    MC.log("Ate a herb unattended. +25 health.", "", "sys");
     MC.markListsDirty();
   }
   if (S.settings.autoBreak && S.cult >= MC.rMax()) MC.act.tryBreak(false);
 };
 
 MC.startLoop = function () {
-  let last = performance.now(), acc = 0, saveAcc = 0;
-  setInterval(() => {
+  var last = performance.now(), acc = 0, saveAcc = 0;
+  setInterval(function () {
     if (!S.started || MC.paused) { last = performance.now(); acc = 0; return; }
-    const now = performance.now();
-    let dt = (now - last) / 1000;
+    var now = performance.now();
+    var dt = (now - last) / 1000;
     last = now;
     if (dt < 0) dt = 0;
     if (dt > MC.CONFIG.MAX_CATCHUP_SEC) dt = MC.CONFIG.MAX_CATCHUP_SEC;
     acc += dt;
-    let n = 0;
+    var n = 0;
     while (acc >= 1 && n < MC.CONFIG.MAX_CATCHUP_SEC) {
       MC.step();
       acc -= 1; n++;
       if (!S.started) break;
     }
-    if (acc >= 1) acc = 0; // shed absurd backlog; offline summary covers real absence
+    if (acc >= 1) acc = 0; // shed absurd backlog; the offline reckoning covers real absence
     saveAcc += dt;
     if (saveAcc >= (S.settings.autosaveSec || MC.CONFIG.AUTOSAVE_SEC)) { saveAcc = 0; MC.writeStore(); }
     MC.updateStatus();
@@ -66,15 +67,17 @@ MC.startLoop = function () {
     MC.updateLists();
     MC.updateScene();
   }, MC.CONFIG.LOOP_MS);
-  window.addEventListener("beforeunload", () => { if (S.started) MC.writeStore(); });
+  window.addEventListener("beforeunload", function () { if (S.started) MC.writeStore(); });
 };
 
 // ---- boot ----
+MC.cacheDom();
 MC.bindAll();
-MC.applySettings();
+MC.applyUI();
+MC.buildStage($("stageMount"));
 if (S.started) {
   $("inName").value = S.name || "";
-  const c = $("btnContinue");
+  var c = $("btnContinue");
   c.hidden = false;
   c.textContent = "Continue as " + S.name;
   $("hasSave").textContent = "On the shelf: " + S.name + ", " + S.path + ", " +
