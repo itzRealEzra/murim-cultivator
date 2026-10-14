@@ -1,7 +1,7 @@
-/* MURIM CULTIVATOR -- Phase 2: actions + screen flow.
+/* Murim Cultivator — actions and screen flow.
    Every handler writes S (never the DOM) and marks lists dirty when
-   list data changed. Skill uniques plug in here: Heart Sword, Thunder
-   Draw, Stone Skin, Cauldron Echo, Pill Veins. */
+   list data changed. Numbers and rules are untouched; only words,
+   feedback (toasts, floats, chimes) and log kinds are new. */
 var MC = window.MC || {};
 window.MC = MC;
 MC.act = {};
@@ -13,38 +13,45 @@ MC.act.meditate = function () {
   MC.act.gainCult(amt);
   S.qi = Math.min(S.maxQi, S.qi + 2);
   S.hp = Math.min(S.maxHp, S.hp + 2);
-  MC.log("Meditate: +" + amt + " cult.");
+  MC.log("Meditated: +" + MC.fmt(amt) + " cultivation.", "", "sys");
+  MC.float("+" + MC.fmt(amt), "gain");
   MC.updateStatus(); MC.updateRates();
 };
 
 MC.act.tryBreak = function (manual) {
   const rm = MC.rMax();
   if (S.cult < rm) {
-    if (manual) MC.log("Need " + Math.ceil(rm - S.cult) + " more cult.", "b");
+    if (manual) MC.log("The measure wants " + MC.fmt(rm - S.cult) + " more.", "bad", "sys");
     return;
   }
   if (Math.random() < MC.breakChance()) {
     S.cult = 0; S.stage++; S.pity = 0;
+    S.breakthroughDone = true;
     if (S.stage >= 9) {
       S.stage = 0;
       S.realm = Math.min(MC.REALMS.length - 1, S.realm + 1);
       S.maxHp += 30; S.maxQi += 8; S.atk += 4; S.def += 2; S.spi += 1;
-      MC.log("BREAKTHROUGH! Ascended to " + MC.rName(), "y");
-    } else MC.log("Stage up: " + MC.rName(), "g");
+      MC.log("Breakthrough. Ascended to " + MC.rName() + ".", "ok", "sys");
+      MC.toast("Ascended to " + MC.rName());
+      MC.sfx("high");
+    } else {
+      MC.log("A stage falls away: " + MC.rName() + ".", "ok", "sys");
+      MC.toast("Stage up: " + MC.rName());
+      MC.sfx("win");
+    }
     S.hp = S.maxHp; S.qi = S.maxQi;
   } else {
     S.pity = (S.pity || 0) + 1;
     S.cult = Math.floor(rm * 0.6);
     S.hp = Math.max(1, S.hp - 20);
-    MC.log("Breakthrough FAILED. -20 HP. Pity +" +
-      Math.round(MC.CONFIG.PITY_STEP * 100) + "% next time.", "b");
+    MC.log("The attempt fails. Twenty health lost; pity grows.", "bad", "sys");
   }
-  MC.markListsDirty(); MC.renderAll();
+  MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
 MC.act.closedDoor = function () {
   S.doorUntil = Date.now() + 30000;
-  MC.log("Closed-door: x3 cult 30s.");
+  MC.log("Behind a closed door: triple gain for thirty breaths.", "", "sys");
   MC.updateStatus();
 };
 
@@ -59,12 +66,13 @@ MC.act.doGather = function (id) {
   let amt = Math.max(1, Math.round((2 + Math.random() * 2) * m));
   if (id === "core" && MC.tAtk() < 8 && Math.random() < 0.3) {
     S.hp = Math.max(1, S.hp - 12);
-    MC.log("Beast mauled you! -12 HP.", "b");
+    MC.log("A beast in the wastes takes twelve health from you.", "bad", "combat");
+    MC.float("-12", "hurt");
   } else {
-    if (MC.act.echoRoll()) { amt *= 2; MC.log("The cauldron echoes: double yield.", "y"); }
+    if (MC.act.echoRoll()) { amt *= 2; MC.log("The cauldron echoes: a doubled yield.", "rich", "loot"); }
     S.inv[n.id] += amt;
     MC.act.gainCult(n.cult * 3);
-    MC.log("Gathered " + amt + "x " + n.t + ".", "g");
+    MC.log("Gathered " + amt + " " + n.t + ".", "", "loot");
   }
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
@@ -73,7 +81,7 @@ MC.act.doCraft = function (id) {
   const r = MC.RECIPES.find(x => x.id === id);
   if (!r) return;
   if (!Object.entries(r.c).every(([k, v]) => S.inv[k] >= v)) {
-    MC.log("Lack mats for " + r.t, "b");
+    MC.log("The price of " + r.t + " is not in hand.", "bad", "sys");
     return;
   }
   for (const k in r.c) S.inv[k] -= r.c[k];
@@ -81,11 +89,11 @@ MC.act.doCraft = function (id) {
   if (r.pill) {
     const n = r.pill + (echo ? 1 : 0);
     S.inv.pill += n;
-    MC.log("Refined " + r.t + " x" + n + "." + (echo ? " Echo!" : ""), "y");
+    MC.log("Refined " + r.t + ", " + n + " in hand." + (echo ? " The echo adds one." : ""), "rich", "loot");
   } else if (r.bigpill) {
     const n = r.bigpill + (echo ? 1 : 0);
     S.inv.bigpill += n;
-    MC.log("Refined " + r.t + " x" + n + "." + (echo ? " Echo!" : ""), "y");
+    MC.log("Refined " + r.t + ", " + n + " in hand." + (echo ? " The echo adds one." : ""), "rich", "loot");
   } else {
     const g = { uid: "g" + Date.now() + Math.floor(Math.random() * 999), t: r.t,
       atk: r.atk || 0, def: r.def || 0, hp: r.hp || 0, spi: r.spi || 0,
@@ -94,8 +102,10 @@ MC.act.doCraft = function (id) {
     S.equip[r.slot] = g.uid;
     if (g.hp) { S.maxHp += g.hp; S.hp += g.hp; }
     const rn = MC.RARITIES.find(x => x.id === g.rar);
-    MC.log("Forged [" + rn.t.toUpperCase() + "] " + r.t + " and equipped it." +
-      (echo ? " Echo: free +1 reforge." : ""), "y");
+    MC.log("Forged a " + rn.t + " " + r.t + ", and took it up." +
+      (echo ? " The echo grants a free reforge." : ""), "rich", "loot");
+    MC.toast("Forged: " + rn.t + " " + r.t);
+    MC.sfx("forge");
   }
   MC.act.gainCult(10);
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
@@ -111,7 +121,7 @@ MC.act.doEquip = function (uid) {
     S.hp = Math.min(S.hp, S.maxHp);
   }
   S.equip[g.slot] = uid;
-  MC.log("Equipped " + g.t + ".");
+  MC.log("Took up " + g.t + ".", "", "sys");
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
@@ -120,12 +130,12 @@ MC.act.upgradeGear = function (uid) {
   if (!g || (g.lvl || 0) >= MC.CONFIG.UPGRADE_MAX) return;
   const cost = MC.upgradeCost(g);
   if (S.inv.ore < cost.ore || S.inv.wood < cost.wood) {
-    MC.log("Lack ore/wood to reforge " + g.t + ".", "b");
+    MC.log("No iron and timber enough to reforge " + g.t + ".", "bad", "sys");
     return;
   }
   S.inv.ore -= cost.ore; S.inv.wood -= cost.wood;
   g.lvl = (g.lvl || 0) + 1;
-  MC.log("Reforged " + g.t + " to +" + g.lvl + ".", "y");
+  MC.log("Reforged " + g.t + " to +" + g.lvl + ".", "rich", "loot");
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
@@ -133,10 +143,10 @@ MC.act.sellGear = function (uid) {
   const i = S.gear.findIndex(x => x.uid === uid);
   if (i < 0) return;
   const g = S.gear[i];
-  if (S.equip[g.slot] === g.uid) { MC.log("Unequip it first.", "b"); return; }
+  if (S.equip[g.slot] === g.uid) { MC.log("Lay it down first.", "bad", "sys"); return; }
   S.gold += MC.sellPrice(g);
   S.gear.splice(i, 1);
-  MC.log("Sold " + g.t + " for " + MC.sellPrice(g) + " gold.", "g");
+  MC.log("Sold " + g.t + " for " + MC.fmt(MC.sellPrice(g)) + " gold.", "", "loot");
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
@@ -156,21 +166,24 @@ MC.act.buySkill = function (id) {
   S.skills[id] = true;
   if (id === "bo1") { S.maxHp += 30; S.hp += 30; }
   if (id === "bo4") { S.maxHp += 120; S.hp += 120; }
-  MC.log("Technique learned: " + sk.t + ".", "y");
+  MC.log("Learned: " + sk.t + ".", "rich", "sys");
+  MC.toast("Technique learned: " + sk.t);
+  MC.sfx("learn");
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
 MC.act.askRebirth = function () {
   if (!MC.canRebirth()) return;
   const seeds = MC.seedsFor(S.totalCult);
-  MC.showModal("Reincarnate?", [
-    "Drink Meng Po's soup and begin again as a mortal.",
-    "This run earned " + Math.floor(S.totalCult) + " cult -> +" + seeds + " Dao Seeds.",
-    "Reset: realm, stats, gear, materials, bosses, tower. Kept: skills, seeds, stones."
-  ], [{ t: "[ KEEP CULTIVATING ]" },
-    { t: "[ REINCARNATE ]", cb: () => {
+  MC.showModal("Drink the soup?", [
+    "Begin again as a child. This life's tally of " + MC.fmt(S.totalCult) +
+    " cultivation is worth " + seeds + " Dao Seeds.",
+    "Kept: techniques, seeds, stones. All else returns to dust."
+  ], [{ t: "Keep cultivating" },
+    { t: "Drink", primary: true, cb: () => {
       const got = MC.doRebirth();
-      MC.log("You open your eyes as a child again. +" + got + " Dao Seeds burn in your soul.", "y");
+      MC.log("You wake as a child again, " + got + " seeds burning in the soul.", "rich", "sys");
+      MC.toast("Reborn with " + got + " Dao Seeds");
       MC.act.enterMain();
     } }]);
 };
@@ -179,19 +192,19 @@ MC.act.doFight = function (i, boss) {
   const f = boss ? Object.assign({}, MC.BOSSES[i]) : Object.assign({}, MC.FOES[i]);
   if (!f.t) return;
   if (boss && S.realm < f.realm) {
-    MC.log("Boss sealed. Reach " + MC.REALMS[f.realm].n + ".", "b");
+    MC.log(f.t + " is sealed until " + MC.REALMS[f.realm].n + ".", "bad", "sys");
     return;
   }
-  if (boss && S.bosses.includes(f.id)) { MC.log("Already slain.", "d"); return; }
+  if (boss && S.bosses.includes(f.id)) { MC.log("Already fallen.", "", "sys"); return; }
   MC.battle = { f: f, hp: f.hp, max: f.hp, boss: boss, rounds: 0 };
-  MC.log("Battle: " + f.t + " (HP " + f.hp + ")", "b");
+  MC.log("Battle joined: " + f.t + " (" + MC.fmt(f.hp) + " health).", "", "combat");
   MC.updateStatus(); MC.updateScene();
 };
 
 MC.act.climbTower = function () {
   const f = MC.towerFoe(S.tower + 1);
   MC.battle = { f: f, hp: f.hp, max: f.hp, boss: false, tower: true, rounds: 0 };
-  MC.log("You climb to floor " + (S.tower + 1) + ": " + f.t + " (HP " + f.hp + ")", "b");
+  MC.log("Floor " + MC.fmt(S.tower + 1) + ": " + f.t + " (" + MC.fmt(f.hp) + " health).", "", "combat");
   MC.showMenu("fight");
   MC.updateStatus(); MC.updateScene();
 };
@@ -203,28 +216,30 @@ MC.act.combatRound = function (burst) {
   let atk = MC.fightAtk(burst);
   let tag = "";
   // Thunder Draw: opening strike +100%. Heart Sword: every 6th strike doubled.
-  if (MC.has("sw4") && MC.battle.rounds === 1) { atk *= 2; tag = " THUNDER DRAW"; }
-  else if (MC.has("sw2") && MC.battle.rounds % 6 === 0) { atk *= 2; tag = " HEART SWORD"; }
+  if (MC.has("sw4") && MC.battle.rounds === 1) { atk *= 2; tag = ", Thunder Draw"; }
+  else if (MC.has("sw2") && MC.battle.rounds % 6 === 0) { atk *= 2; tag = ", Heart Sword"; }
   const crit = Math.random() < 0.1 + spi * 0.02;
   let dmg = Math.max(1, atk - MC.battle.f.def + Math.floor(Math.random() * 4));
   if (crit) dmg = Math.floor(dmg * 1.8);
   MC.battle.hp -= dmg;
-  MC.log((burst ? "BURST " : "Hit ") + dmg + " to " + MC.battle.f.t +
-    (crit ? " CRIT" : "") + tag + ".");
+  MC.log((burst ? "Burst for " : "Struck for ") + MC.fmt(dmg) +
+    (crit ? ", a telling blow" : "") + tag + ".", crit ? "rich" : "", "combat");
+  MC.float("-" + MC.fmt(dmg), "hit");
   if (MC.battle.hp <= 0) { MC.act.winFight(); return; }
   const ed = Math.max(1, MC.battle.f.atk - MC.tDef() + Math.floor(Math.random() * 4));
   S.hp -= ed;
-  MC.log(MC.battle.f.t + " hits back " + ed + ". HP " + Math.max(0, Math.ceil(S.hp)) + ".", "b");
+  MC.log(MC.battle.f.t + " answers for " + ed + ".", "bad", "combat");
+  MC.float("-" + ed, "hurt");
   if (MC.has("bo3")) { // Stone Skin: reflect 20%
     const th = Math.max(1, Math.floor(ed * 0.2));
     MC.battle.hp -= th;
-    MC.log("Stone Skin reflects " + th + ".");
+    MC.log("Stone Skin returns " + th + ".", "", "combat");
     if (MC.battle.hp <= 0) { MC.act.winFight(); return; }
   }
   if (S.hp <= 0) {
     S.hp = Math.ceil(S.maxHp * 0.3);
     S.cult = Math.max(0, S.cult - 20);
-    MC.log("You fell... woke at 30% HP. -20 cult.", "b");
+    MC.log("You fall, and wake at a third health. Twenty cultivation gone.", "bad", "sys");
     MC.battle = null;
   }
   MC.updateStatus(); MC.updateScene();
@@ -238,16 +253,18 @@ MC.act.winFight = function () {
   MC.act.gainCult(cg);
   S.gold += f.gold;
   for (const k in (f.loot || {})) S.inv[k] += f.loot[k];
-  if (Math.random() < MC.stoneChance()) { S.stones++; MC.log("Found 1 spirit stone.", "y"); }
+  if (Math.random() < MC.stoneChance()) { S.stones++; MC.log("A spirit stone among the spoils.", "rich", "loot"); }
   if (isTower) {
     S.tower = Math.max(S.tower, f.tower);
-    MC.log("Floor " + f.tower + " cleared! +" + cg + " cult +" + f.gold + " gold.", "g");
+    MC.log("Floor " + MC.fmt(f.tower) + " cleared: +" + MC.fmt(cg) + " cultivation, +" + MC.fmt(f.gold) + " gold.", "ok", "loot");
   } else {
-    MC.log("Slew " + f.t + "! +" + cg + " cult +" + f.gold + " gold.", "g");
+    MC.log("Slew " + f.t + ": +" + MC.fmt(cg) + " cultivation, +" + MC.fmt(f.gold) + " gold.", "ok", "loot");
   }
   if (MC.battle.boss && !S.bosses.includes(f.id)) {
     S.bosses.push(f.id); S.spi++; S.maxHp += 20; S.hp = S.maxHp;
-    MC.log("BOSS core absorbed: +1 SPI +20 HP.", "y");
+    MC.log("The tyrant's core settles in you: +1 spirit, +20 health.", "rich", "loot");
+    MC.toast("Tyrant fallen: " + f.t);
+    MC.sfx("win");
   }
   const wasBoss = MC.battle.boss;
   const fidx = MC.FOES.findIndex(x => x.id === f.id);
@@ -265,7 +282,7 @@ MC.act.winFight = function () {
 MC.act.eatHerb = function () {
   if (S.inv.herb > 0 && S.hp < S.maxHp) {
     S.inv.herb--; S.hp = Math.min(S.maxHp, S.hp + 25);
-    MC.log("Ate herb. +25 HP.", "g");
+    MC.log("Chewed a herb: +25 health.", "ok", "sys");
     MC.markListsDirty(); MC.renderAll();
   }
 };
@@ -275,59 +292,70 @@ MC.act.takePill = function () {
   if (S.inv.pill > 0) {
     S.inv.pill--; S.qi = S.maxQi; MC.act.gainCult(50 * m);
     if (MC.has("al3")) S.hp = Math.min(S.maxHp, S.hp + 40); // Pill Veins
-    MC.log("Took pill. +" + 50 * m + " cult." + (MC.has("al3") ? " +40 HP." : ""), "g");
+    MC.log("Swallowed a pill: +" + MC.fmt(50 * m) + " cultivation." + (MC.has("al3") ? " +40 health." : ""), "ok", "sys");
   } else if (S.inv.bigpill > 0) {
     S.inv.bigpill--; S.qi = S.maxQi; MC.act.gainCult(200 * m);
     if (MC.has("al3")) S.hp = Math.min(S.maxHp, S.hp + 40);
-    MC.log("Took core pill. +" + 200 * m + " cult." + (MC.has("al3") ? " +40 HP." : ""), "y");
-  } else MC.log("No pills. Forge some.", "b");
+    MC.log("Swallowed a core pill: +" + MC.fmt(200 * m) + " cultivation." + (MC.has("al3") ? " +40 health." : ""), "rich", "sys");
+  } else MC.log("No pills. The forge is waiting.", "bad", "sys");
   MC.markListsDirty(); MC.renderAll();
 };
 
-// ---- screen flow: explicit Continue vs New Game ----
+/* ---- screen flow ---- */
 MC.act.applyPath = function (p) {
   if (p === "body") { S.maxHp += 40; S.hp = S.maxHp; S.def += 1; }
   if (p === "talisman") { S.maxQi += 10; S.qi = S.maxQi; }
 };
 
 MC.act.enterMain = function () {
+  MC.applySettings();
   MC.syncSettingsUI();
   MC.show("screen-main");
-  MC.showMenu("cult");
+  const last = S.settings.lastPanel;
+  MC.showMenu(document.getElementById("m-" + last) ? last : "cult");
   MC.markListsDirty();
   MC.renderAll();
   if (MC.pendingOffline) {
     const sum = MC.pendingOffline;
     MC.pendingOffline = null;
-    MC.showModal("Offline summary", MC.offlineLines(sum), [{ t: "[ BEGIN ]" }]);
+    MC.showModal("While you were away", MC.offlineLines(sum), [{ t: "Begin", primary: true }]);
   }
 };
 
+MC.act.validName = function (v) {
+  v = v.trim();
+  if (v.length < 2) return "A name wants at least two letters.";
+  if (v.length > 16) return "Sixteen letters at most; the seal is small.";
+  return "";
+};
+
 MC.act.newGame = function (path) {
-  S = Object.assign(MC.DEFAULT(), { name: S.name, path: path });
+  S = Object.assign(MC.DEFAULT(), { name: S.name, path: path, settings: S.settings });
+  MC.applySettings();
   MC.act.applyPath(path);
   S.started = true;
   MC.battle = null;
-  MC.log("Welcome, " + S.name + " [" + path + "]. Your idle cultivation begins.", "g");
-  MC.log("Loop: CULT per sec -> BREAKTHROUGH -> GATHER mats -> FORGE gear -> FIGHT/BOSS.", "d");
+  MC.log("Welcome, " + S.name + ". The idle years begin.", "ok", "sys");
+  MC.log("Cultivation fills on its own; breakthroughs carry you up.", "", "sys");
   MC.act.enterMain();
   MC.writeStore();
 };
 
 MC.act.beginFromPath = function () {
-  if (!MC.selPath) return;
+  if (!MC.selPath) { $("pathErr").textContent = "Choose a path first — keys 1–4, or a tap."; return; }
   const overwrites = S.started;
   const go = () => MC.act.newGame(MC.selPath);
   if (overwrites) {
-    MC.showModal("Overwrite?", ["A save (" + S.name + ") already exists.",
-      "Start over as " + S.name + " on " + MC.selPath + "? Old progress is lost."],
-      [{ t: "[ KEEP OLD ]" }, { t: "[ OVERWRITE ]", cb: go }]);
+    MC.showModal("Begin again?", ["A life named " + S.name + " already rests on the shelf.",
+      "Begin as " + S.name + " on a new path? The old life is lost."],
+      [{ t: "Keep the old life" }, { t: "Begin again", primary: true, cb: go }]);
   } else go();
 };
 
-// ---- bindings ----
+/* ---- bindings ---- */
 MC.bindAll = function () {
   document.querySelectorAll(".menurow button[data-m]").forEach(b => {
+    if (!b.getAttribute("data-basetip")) b.setAttribute("data-basetip", b.getAttribute("data-tip") || "");
     b.addEventListener("click", () => MC.showMenu(b.dataset.m));
   });
   document.addEventListener("keydown", e => {
@@ -335,26 +363,60 @@ MC.bindAll = function () {
       if (e.key === "Escape") MC.hideModal();
       return;
     }
-    if (!$("screen-main").classList.contains("active")) return;
-    const map = { 1: "cult", 2: "gather", 3: "forge", 4: "fight", 5: "boss", 6: "char", 7: "skills" };
-    if (map[e.key]) MC.showMenu(map[e.key]);
+    const typing = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    if ($("screen-path").classList.contains("active") && !typing) {
+      const pick = { 1: 0, 2: 1, 3: 2, 4: 3 }[e.key];
+      if (pick !== undefined && MC.PATHS[pick]) {
+        MC.selPath = MC.PATHS[pick].id;
+        $("btnToGame").disabled = false;
+        $("pathErr").textContent = "";
+        MC.drawPaths();
+      } else if (e.key === "Enter" && MC.selPath) MC.act.beginFromPath();
+      return;
+    }
+    if (!$("screen-main").classList.contains("active") || typing) return;
+    const map = { 1: "cult", 2: "gather", 3: "forge", 4: "fight", 5: "boss", 6: "skills", 7: "char", 8: "settings" };
+    if (map[e.key]) { MC.showMenu(map[e.key]); return; }
+    const k = e.key.toLowerCase();
+    if (k === "m") MC.act.meditate();
+    else if (k === "b") MC.act.tryBreak(true);
+    else if (k === "a") MC.act.combatRound(false);
+    else if (k === "q") {
+      if (S.qi < 10) { MC.log("Ten qi wanted; circulate first.", "bad", "sys"); return; }
+      S.qi -= 10;
+      MC.act.combatRound(true);
+    } else if (k === "f" && MC.battle) {
+      MC.log("Withdrew from " + MC.battle.f.t + ".", "", "combat");
+      MC.battle = null;
+      MC.updateStatus(); MC.updateScene();
+    }
   });
 
-  $("btnContinue").addEventListener("click", () => { MC.act.enterMain(); });
-  $("btnToPath").addEventListener("click", () => {
-    const v = $("inName").value.trim();
-    if (v.length < 2) { $("userErr").textContent = "!! name needs 2+ chars"; return; }
+  // First pages: inline validation, no surprises.
+  $("inName").addEventListener("input", e => {
+    $("userErr").textContent = MC.act.validName(e.target.value) && e.target.value.length ? MC.act.validName(e.target.value) : "";
+  });
+  $("nameForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const err = MC.act.validName($("inName").value);
+    if (err) { $("userErr").textContent = err; return; }
     $("userErr").textContent = "";
-    S.name = v;
+    S.name = $("inName").value.trim();
     if (!MC.selPath) MC.selPath = S.path || "";
-    $("pathNameEcho").textContent = v;
+    $("pathNameEcho").textContent = S.name;
     MC.drawPaths();
     $("btnToGame").disabled = !MC.selPath;
+    if (!MC.selPath) $("pathErr").textContent = "Choose a path first — keys 1–4, or a tap.";
     MC.show("screen-path");
   });
+  $("btnContinue").addEventListener("click", () => { MC.act.enterMain(); });
   $("btnBackUser").addEventListener("click", () => MC.show("screen-user"));
   $("btnToGame").addEventListener("click", MC.act.beginFromPath);
+  $("btnHintOff").addEventListener("click", () => {
+    S.hintsOff = true; MC.writeStore(); MC.updateHints();
+  });
 
+  // The idle's own toggles write S.
   $("focus").addEventListener("change", e => {
     S.settings.focus = e.target.value;
     MC.markListsDirty(); MC.renderAll(); MC.writeStore();
@@ -368,18 +430,35 @@ MC.bindAll = function () {
     });
   }
 
+  // Settings tab: applied at once, no reloading.
+  $("setTheme").addEventListener("change", e => { S.settings.theme = e.target.value; MC.applySettings(); MC.writeStore(); });
+  $("setText").addEventListener("change", e => { S.settings.textSize = e.target.value; MC.applySettings(); MC.writeStore(); });
+  $("setNum").addEventListener("change", e => { S.settings.numFmt = e.target.value; MC.markListsDirty(); MC.renderAll(); MC.writeStore(); });
+  $("setAutosave").addEventListener("change", e => { S.settings.autosaveSec = parseInt(e.target.value, 10) || 5; MC.writeStore(); });
+  $("setSound").addEventListener("change", e => { S.settings.muted = !e.target.checked; MC.writeStore(); });
+  $("setMotion").addEventListener("change", e => { S.settings.reduceMotion = e.target.checked; MC.applySettings(); MC.writeStore(); });
+
+  // Chronicle filter.
+  document.querySelectorAll(".filters button[data-f]").forEach(b => {
+    b.addEventListener("click", () => {
+      S.settings.logFilter = b.dataset.f;
+      MC.writeStore();
+      MC.applyFilter();
+    });
+  });
+
   $("btnMed").addEventListener("click", MC.act.meditate);
   $("btnBreak").addEventListener("click", () => MC.act.tryBreak(true));
   $("btnDoor").addEventListener("click", MC.act.closedDoor);
   $("btnHit").addEventListener("click", () => MC.act.combatRound(false));
   $("btnBurst").addEventListener("click", () => {
-    if (S.qi < 10) { MC.log("Need 10 qi.", "b"); return; }
+    if (S.qi < 10) { MC.log("Ten qi wanted; circulate first.", "bad", "sys"); return; }
     S.qi -= 10;
     MC.act.combatRound(true);
   });
   $("btnFlee").addEventListener("click", () => {
     if (MC.battle) {
-      MC.log("Fled from " + MC.battle.f.t + ".");
+      MC.log("Withdrew from " + MC.battle.f.t + ".", "", "combat");
       MC.battle = null;
       MC.updateStatus(); MC.updateScene();
     }
@@ -388,39 +467,45 @@ MC.bindAll = function () {
   $("btnPill").addEventListener("click", MC.act.takePill);
   $("btnSave").addEventListener("click", () => {
     MC.writeStore();
-    $("saveMsg").textContent = "saved " + new Date().toLocaleTimeString();
+    $("saveMsg").textContent = "Recorded " + new Date().toLocaleTimeString() + ".";
   });
-  $("btnWipe").addEventListener("click", () => {
-    MC.showModal("Reset?", ["Shatter this cultivation and begin again as a mortal?"],
-      [{ t: "[ KEEP ]" }, {
-        t: "[ RESET ]", cb: () => {
-          try { localStorage.removeItem(MC.CONFIG.SAVE_KEY); } catch (e) {}
-          location.reload();
-        }
-      }]);
-  });
-  $("btnClear").addEventListener("click", () => { $("log").textContent = ""; });
   $("btnPause").addEventListener("click", () => {
     MC.paused = !MC.paused;
-    $("btnPause").textContent = MC.paused ? "[RESUME]" : "[PAUSE]";
-    MC.log(MC.paused ? "Paused." : "Resumed.");
+    $("btnPause").textContent = MC.paused ? "Resume" : "Pause";
+    MC.log(MC.paused ? "The world holds its breath." : "The world breathes again.", "", "sys");
   });
 
+  // Record carried elsewhere.
   $("btnExp").addEventListener("click", () => {
     const s = MC.exportSave();
     $("saveBox").value = s;
     $("saveBox").select();
     try { document.execCommand("copy"); } catch (e) {}
     if (navigator.clipboard) navigator.clipboard.writeText(s).catch(() => {});
-    $("saveMsg").textContent = "save copied to box + clipboard.";
+    $("saveMsg").textContent = "Copied to the box and the clipboard.";
   });
   $("btnImp").addEventListener("click", () => {
     try {
       MC.importSave($("saveBox").value);
       MC.selPath = S.path;
       MC.battle = null;
+      MC.applySettings();
       MC.act.enterMain();
-      MC.log("Save imported. The heavens accept it.", "y");
-    } catch (e) { $("saveMsg").textContent = "import failed: bad save string."; }
+      MC.log("The brought record is accepted.", "rich", "sys");
+    } catch (e) { $("saveMsg").textContent = "Not a record; nothing changed."; }
+  });
+
+  // Danger, behind a written word.
+  $("wipeWord").addEventListener("input", e => {
+    $("btnWipe").disabled = e.target.value.trim().toLowerCase() !== "sever";
+  });
+  $("btnWipe").addEventListener("click", () => {
+    if ($("wipeWord").value.trim().toLowerCase() !== "sever") return;
+    try { localStorage.removeItem(MC.CONFIG.SAVE_KEY); } catch (e) {}
+    location.reload();
+  });
+  $("btnClear").addEventListener("click", () => {
+    $("log").textContent = "";
+    MC._lastKey = null; MC._lastEl = null;
   });
 };

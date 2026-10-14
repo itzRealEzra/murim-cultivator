@@ -5,7 +5,7 @@ window.MC = MC;
 
 MC.CONFIG = {
   SAVE_KEY: "murim_v2",
-  SAVE_V: 3,
+  SAVE_V: 4,
   OFFLINE_CAP_SEC: 8 * 3600,
   OFFLINE_MIN_SEC: 60,
   AUTOSAVE_SEC: 5,

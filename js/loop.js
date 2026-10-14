@@ -60,7 +60,7 @@ MC.startLoop = function () {
     }
     if (acc >= 1) acc = 0; // shed absurd backlog; offline summary covers real absence
     saveAcc += dt;
-    if (saveAcc >= MC.CONFIG.AUTOSAVE_SEC) { saveAcc = 0; MC.writeStore(); }
+    if (saveAcc >= (S.settings.autosaveSec || MC.CONFIG.AUTOSAVE_SEC)) { saveAcc = 0; MC.writeStore(); }
     MC.updateStatus();
     MC.updateRates();
     MC.updateLists();
@@ -71,18 +71,19 @@ MC.startLoop = function () {
 
 // ---- boot ----
 MC.bindAll();
+MC.applySettings();
 if (S.started) {
   $("inName").value = S.name || "";
   const c = $("btnContinue");
-  c.style.display = "";
-  c.textContent = "[ CONTINUE AS " + S.name + " ]";
-  $("hasSave").textContent = "save found: " + S.name + " [" + S.path + "] realm " +
-    MC.REALMS[S.realm].n + " -- continue, or enter a name for a new game.";
+  c.hidden = false;
+  c.textContent = "Continue as " + S.name;
+  $("hasSave").textContent = "On the shelf: " + S.name + ", " + S.path + ", " +
+    MC.REALMS[S.realm].n + ". Continue, or write a name for a new life.";
   MC.selPath = S.path;
   $("pathNameEcho").textContent = S.name;
   MC.drawPaths();
 } else {
-  $("btnContinue").style.display = "none";
+  $("btnContinue").hidden = true;
   MC.drawPaths();
 }
 MC.startLoop();

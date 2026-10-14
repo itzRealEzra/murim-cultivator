@@ -6,7 +6,9 @@ window.MC = MC;
 
 MC.DEFAULT_SETTINGS = function () {
   return { focus: "cult", autoCult: true, autoBreak: true, autoGather: true,
-    autoFight: false, autoHeal: true, autoTower: false };
+    autoFight: false, autoHeal: true, autoTower: false,
+    theme: "parchment", textSize: "m", reduceMotion: false, numFmt: "compact",
+    autosaveSec: 5, muted: false, lastPanel: "cult", logFilter: "all" };
 };
 
 MC.DEFAULT = function () {
@@ -28,6 +30,7 @@ MC.DEFAULT = function () {
     frac: { herb: 0, ore: 0, wood: 0, core: 0 },
     gear: [], equip: { weapon: null, armor: null, charm: null },
     settings: MC.DEFAULT_SETTINGS(),
+    hintsOff: false, breakthroughDone: false,
     doorUntil: 0, elapsed: 0,
     lastSeen: Date.now(), started: false
   };
@@ -52,6 +55,12 @@ MC.migrate = function (raw) {
   }
   if (typeof d.name !== "string") d.name = "";
   if (typeof d.path !== "string") d.path = "";
+  // v4 (UI pass): onboarding + display settings. Old saves start with
+  // hints on and breakthroughDone inferred from any progress.
+  if (typeof d.hintsOff !== "boolean") d.hintsOff = false;
+  if (!raw || typeof raw.breakthroughDone !== "boolean") {
+    d.breakthroughDone = (d.stage > 0 || d.realm > 0 || (d.rebirths || 0) > 0);
+  }
   d.v = MC.CONFIG.SAVE_V;
   return d;
 };
