@@ -1,14 +1,19 @@
-/* Murim Cultivator v3-phase4 — actions and screen flow.
-   Every handler writes S (never the DOM) and marks lists dirty when
-   list data changed. Rules and numbers are untouched. One-line event
-   emits let the stage answer; behavior never branches on them. */
+/* Murim Cultivator v3-phase5 — actions and screen flow.
+   Every handler writes S (never the DOM). Rules and numbers are
+   untouched. One-line event emits let the scenery answer; behavior
+   never branches on them. Space/Enter/Escape never fire while typing
+   or when a modal blocks them. No number keys anywhere. */
 var MC = window.MC || {};
 window.MC = MC;
 MC.act = {};
 
 MC.act.gainCult = function (n) { S.cult += n; S.totalCult += n; };
 
+/* Space: Cultivate on the lobby, Meditate-or-Breakthrough in the panel. */
 MC.act.primary = function () {
+  if (MC.paused) return;
+  if (MC.screen === "lobby") { MC.openCultivate(); return; }
+  if (MC.screen !== "cultivate") return;
   if (MC.battle) MC.act.combatRound(false);
   else if (S.cult >= MC.rMax()) MC.act.tryBreak(true);
   else MC.act.meditate();
@@ -52,15 +57,18 @@ MC.act.tryBreak = function (manual) {
       MC.sfx("win");
     }
     S.hp = S.maxHp; S.qi = S.maxQi;
+    MC.avatarBurst(true);
     MC.showBanner(MC.rName(), false);
   } else {
     S.pity = (S.pity || 0) + 1;
     S.cult = Math.floor(rm * 0.6);
     S.hp = Math.max(1, S.hp - 20);
     MC.log("The attempt fails. Twenty health lost; pity grows.", "bad", "sys");
+    MC.avatarBurst(false);
     MC.showBanner("The qi scatters.", true);
     MC.sfx("error");
   }
+  MC.tipProgress("med");
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
@@ -93,7 +101,6 @@ MC.act.doGather = function (id) {
     MC.float("+" + amt, "gain");
   }
   MC.markStageAct("gather", 3000);
-  MC.tipProgress("gather");
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
@@ -130,7 +137,6 @@ MC.act.doCraft = function (id) {
     MC.sfx("forge");
   }
   MC.act.gainCult(10);
-  MC.tipProgress("forge");
   MC.markListsDirty(); MC.renderAll(); MC.writeStore();
 };
 
@@ -229,7 +235,6 @@ MC.act.doFight = function (i, boss) {
   MC.battle = { f: f, hp: f.hp, max: f.hp, boss: boss, rounds: 0 };
   MC.log("Battle joined: " + f.t + " (" + MC.fmt(f.hp) + " health).", "", "combat");
   MC.emit("foe", { foe: f, boss: boss });
-  MC.tipProgress("fight");
   MC.updateStatus(); MC.updateScene();
 };
 
@@ -238,7 +243,6 @@ MC.act.climbTower = function () {
   MC.battle = { f: f, hp: f.hp, max: f.hp, boss: false, tower: true, rounds: 0 };
   MC.log("Floor " + MC.fmt(S.tower + 1) + ": " + f.t + " (" + MC.fmt(f.hp) + " health).", "", "combat");
   MC.emit("foe", { foe: f, boss: false });
-  MC.flashPanel("fight");
   MC.updateStatus(); MC.updateScene();
 };
 
@@ -360,22 +364,21 @@ MC.act.applyPath = function (p) {
   if (p === "talisman") { S.maxQi += 10; S.qi = S.maxQi; }
 };
 
+MC._scenesBuilt = false;
 MC.act.enterMain = function () {
   MC.applyUI();
   MC.syncSettingsUI();
-  MC.show("screen-main");
-  MC.buildPortraits();
+  if (!MC._scenesBuilt) {
+    MC._scenesBuilt = true;
+    MC.buildStage($("lobbyScene"));
+    MC.buildStage($("cultScene"));
+    MC.buildAvatar($("spriteBox"));
+  }
+  MC.showScreen("lobby");
+  MC.buildDrawer();
   MC.markListsDirty();
   MC.renderAll();
   if (MC.pendingOffline) MC.showOffline();
-};
-MC.buildPortraits = function () {
-  var p = $("portrait");
-  if (p && MC.snap.portrait !== S.path) {
-    MC.snap.portrait = S.path;
-    p.textContent = "";
-    p.appendChild(MC.portraitSVG(false));
-  }
 };
 
 MC.act.validName = function (v) {
@@ -401,7 +404,7 @@ MC.act.newGame = function (path) {
 };
 
 MC.act.beginFromPath = function () {
-  if (!MC.selPath) { $("pathErr").textContent = "Choose a path first — keys 1–4, or a tap."; return; }
+  if (!MC.selPath) { $("pathErr").textContent = "Choose a path first — Tab to one, Enter begins."; return; }
   var go = function () { MC.act.newGame(MC.selPath); };
   if (S.started) {
     MC.showModal("Begin again?", ["A life named " + S.name + " already rests on the shelf.",
@@ -410,13 +413,19 @@ MC.act.beginFromPath = function () {
   } else go();
 };
 
+MC.act.pause = function () {
+  MC.paused = !MC.paused;
+  MC.log(MC.paused ? "The world holds its breath." : "The world breathes again.", "", "sys");
+  MC.updateStatus();
+};
+
 MC.HELP = [
-  "Cultivation fills on its own; breakthroughs carry you upward.",
-  "Gathering fills the pouch; the forge turns it into arms.",
-  "Arms let you survive stronger foes and tyrants.",
-  "Tyrants and the tower pay stones; stones buy techniques.",
-  "At Dao Ascension you may be reborn for Dao Seeds.",
-  "Then it all begins again, faster, and further."
+  "This is the lobby: one plate, three bars, one button.",
+  "The III menu holds every section; most open in later tales.",
+  "Cultivate fills the measure on its own; breakthroughs carry you up.",
+  "Gathering, arms and battles continue underneath, unattended.",
+  "Space repeats the one action before you; Escape closes all doors.",
+  "At Dao Ascension you may be reborn, and begin again further."
 ];
 
 /* ---- bindings ---- */
@@ -427,27 +436,24 @@ MC.bindAll = function () {
       if (e.key === "Escape") MC.hideModal();
       return;
     }
-    var typing = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-    if ($("screen-path").classList.contains("active") && !typing) {
-      var pick = { 1: 0, 2: 1, 3: 2, 4: 3 }[e.key];
-      if (pick !== undefined && MC.PATHS[pick]) {
-        MC.selPath = MC.PATHS[pick].id;
-        $("btnToGame").disabled = false;
-        $("pathErr").textContent = "";
-        MC.drawPaths();
-      } else if (e.key === "Enter" && MC.selPath) MC.act.beginFromPath();
+    if (MC.drawerOpen()) {
+      if (e.key === "Escape") MC.setDrawer(false);
+      else MC.trapDrawer(e);
       return;
     }
-    if (!$("screen-main").classList.contains("active") || typing) return;
+    var typing = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    if ($("screen-path").classList.contains("active") && !typing) {
+      if (e.key === "Enter" && MC.selPath) MC.act.beginFromPath();
+      return;
+    }
+    if (typing) return;
+    var onLobby = $("screen-lobby").classList.contains("active");
+    var onCult = $("screen-cultivate").classList.contains("active");
+    if (!onLobby && !onCult) return;
     var k = e.key.toLowerCase();
     if (k === " ") { e.preventDefault(); MC.act.primary(); }
-    else if (k === "q") {
-      if (S.qi < 10) { MC.log("Ten qi wanted; circulate first.", "bad", "sys"); return; }
-      S.qi -= 10;
-      MC.act.combatRound(true);
-    }
-    else if (k === "e") MC.act.eatHerb();
-    else if (k === "f") MC.act.flee();
+    else if (k === "enter" && onLobby) MC.openCultivate();
+    else if (k === "escape" && onCult) MC.openLobby();
   });
   /* tap-to-toggle tooltips on touch */
   document.addEventListener("click", function (e) {
@@ -473,55 +479,54 @@ MC.bindAll = function () {
     $("pathNameEcho").textContent = S.name;
     MC.drawPaths();
     $("btnToGame").disabled = !MC.selPath;
-    if (!MC.selPath) $("pathErr").textContent = "Choose a path first — keys 1–4, or a tap.";
-    MC.show("screen-path");
+    if (!MC.selPath) $("pathErr").textContent = "Choose a path first — Tab to one, Enter begins.";
+    MC.showScreen("path");
   });
   $("inName").addEventListener("input", function (e) {
     $("userErr").textContent = e.target.value.length ? MC.act.validName(e.target.value) : "";
   });
   $("btnContinue").addEventListener("click", function () { MC.act.enterMain(); });
-  $("btnBackUser").addEventListener("click", function () { MC.show("screen-user"); });
+  $("btnBackUser").addEventListener("click", function () { MC.showScreen("user"); });
   $("btnToGame").addEventListener("click", MC.act.beginFromPath);
-  $("tipSkip").addEventListener("click", function () {
-    S.ui.hintsDone = true; MC.writeStore(); MC.tips();
+  $("tipSkipL").addEventListener("click", MC.skipTips);
+  $("tipSkipC").addEventListener("click", MC.skipTips);
+
+  /* lobby */
+  R.btnCultivate.addEventListener("click", function () { MC.openCultivate(); });
+  R.goalLine.addEventListener("click", function () {
+    if ((MC._goalPanel || "cult") === "cult") MC.openCultivate();
+    /* any other destination is Coming soon: the line does nothing */
+  });
+  R.btnPauseL.addEventListener("click", MC.act.pause);
+  R.btnSettingsL.addEventListener("click", function () { MC.openSettings(); });
+  R.btnMenu.addEventListener("click", function () {
+    if (MC.drawerOpen()) MC.setDrawer(false);
+    else MC.setDrawer(true, R.btnMenu);
   });
 
-  /* action bar */
-  R.actPrimary.addEventListener("click", MC.act.primary);
-  R.actBurst.addEventListener("click", function () {
-    if (S.qi < 10) { MC.log("Ten qi wanted; circulate first.", "bad", "sys"); MC.sfx("error"); return; }
-    S.qi -= 10;
-    MC.act.combatRound(true);
+  /* cultivate */
+  R.btnLobby.addEventListener("click", function () { MC.openLobby(); });
+  R.btnPauseC.addEventListener("click", MC.act.pause);
+  R.btnSettingsC.addEventListener("click", function () { MC.openSettings(); });
+  R.btnMenuC.addEventListener("click", function () {
+    if (MC.drawerOpen()) MC.setDrawer(false);
+    else MC.setDrawer(true, R.btnMenuC);
   });
-  R.actDoor.addEventListener("click", MC.act.closedDoor);
-  R.actEat.addEventListener("click", MC.act.eatHerb);
-  R.actPill.addEventListener("click", MC.act.takePill);
-  R.actFlee.addEventListener("click", MC.act.flee);
+  R.btnMedC.addEventListener("click", MC.act.meditate);
+  R.btnBreakC.addEventListener("click", function () { MC.act.tryBreak(true); });
+  R.btnDoorC.addEventListener("click", MC.act.closedDoor);
+  R.drawerBackdrop.addEventListener("click", function () { MC.setDrawer(false); });
 
-  /* cultivate panel */
-  R.btnMed2.addEventListener("click", MC.act.meditate);
-  R.btnBreak2.addEventListener("click", function () { MC.act.tryBreak(true); });
-  R.btnDoor2.addEventListener("click", MC.act.closedDoor);
-
-  /* unattended-work switches; twins stay in step */
-  var bools = [["optCult", "autoCult", "optCult2"], ["optBreak", "autoBreak", "optBreak2"],
-    ["optGather", "autoGather", "optGather2"], ["optFight", "autoFight", null],
-    ["optHeal", "autoHeal", null], ["optTower", "autoTower", null]];
-  for (var b = 0; b < bools.length; b++) (function (id, key, twin) {
+  /* unattended-work switches */
+  var bools = [["optCultC", "autoCult"], ["optBreakC", "autoBreak"]];
+  for (var b = 0; b < bools.length; b++) (function (id, key) {
     $(id).addEventListener("change", function (e) {
       S.settings[key] = e.target.checked;
       MC.syncSwitch(e.target, e.target.checked);
-      if (twin) MC.syncSwitch($(twin), e.target.checked);
       MC.markListsDirty(); MC.renderAll(); MC.writeStore();
     });
-    if (twin) $(twin).addEventListener("change", function (e) {
-      S.settings[key] = e.target.checked;
-      MC.syncSwitch(e.target, e.target.checked);
-      MC.syncSwitch($(id), e.target.checked);
-      MC.markListsDirty(); MC.renderAll(); MC.writeStore();
-    });
-  })(bools[b][0], bools[b][1], bools[b][2]);
-  var fr = document.querySelectorAll('input[name="focus"]');
+  })(bools[b][0], bools[b][1]);
+  var fr = document.querySelectorAll('#screen-cultivate input[name="focus"]');
   for (var f = 0; f < fr.length; f++) {
     fr[f].addEventListener("change", function (e) {
       S.settings.focus = e.target.value;
@@ -529,26 +534,8 @@ MC.bindAll = function () {
     });
   }
 
-  /* HUD */
-  R.btnPauseChip.addEventListener("click", function () {
-    MC.paused = !MC.paused;
-    MC.log(MC.paused ? "The world holds its breath." : "The world breathes again.", "", "sys");
-    MC.updateStatus();
-  });
-  $("btnHelp").addEventListener("click", function () { MC.showModal("How the mountain works", MC.HELP, [{ t: "Return", primary: true }]); });
-  $("btnSettings").addEventListener("click", function () { MC.openSettings(); });
-  R.goalStrip.addEventListener("click", function () { MC.flashPanel(MC._goalPanel || "cult"); });
-
-  /* chronicle filter */
-  document.querySelectorAll(".filters button[data-f]").forEach(function (x) {
-    x.addEventListener("click", function () {
-      S.ui.logFilter = x.dataset.f;
-      MC.writeStore();
-      MC.applyFilter();
-    });
-  });
-  $("btnClear").addEventListener("click", function () {
-    R.log.textContent = "";
-    MC._lastKey = null; MC._lastEl = null;
-  });
+  /* chronicle panel is gone with its sweep button; the log keeps listening */
+};
+MC.skipTips = function () {
+  S.ui.hintsDone = true; MC.writeStore(); MC.tips();
 };

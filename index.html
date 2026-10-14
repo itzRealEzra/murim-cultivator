@@ -29,7 +29,7 @@ try {
     <div class="menubg" aria-hidden="true"><div class="menushade"></div></div>
     <div class="menupanel frame">
       <div class="carve"><span class="seal" aria-hidden="true"></span><span>A xianxia idle RPG</span></div>
-      <h1 id="userTitle" class="gametitle">Murim Cultivator</h1>
+      <h1 id="userTitle" class="gametitle" tabindex="-1">Murim Cultivator</h1>
       <p class="tagline">Gather. Forge. Slay. Be reborn.</p>
       <form id="nameForm" novalidate>
         <label class="field" for="inName">Name your cultivator</label>
@@ -49,8 +49,8 @@ try {
     <div class="menubg" aria-hidden="true"><div class="menushade"></div></div>
     <div class="menupanel frame wide">
       <div class="carve"><span class="seal" aria-hidden="true"></span><span>Second step</span></div>
-      <h2 id="pathTitle">Choose a path, <span id="pathNameEcho"></span></h2>
-      <p class="dim">One road for the whole life. Keys 1–4 choose, Enter begins.</p>
+      <h2 id="pathTitle" tabindex="-1">Choose a path, <span id="pathNameEcho"></span></h2>
+      <p class="dim">One road for the whole life. Tab to a path, Enter begins.</p>
       <div class="pathgrid" id="pathRow" role="radiogroup" aria-label="Cultivation paths"></div>
       <p id="pathErr" class="err" role="alert"></p>
       <p class="btnrow">
@@ -60,163 +60,92 @@ try {
     </div>
   </section>
 
-  <!-- The dashboard: every panel live at once -->
-  <section id="screen-main" class="screen" aria-label="Game">
-    <p id="wideNotice" class="widenotice" hidden>Best on a wide screen — the mountain is wider than this window.</p>
-    <header class="hud frame">
-      <div class="hud-left">
-        <div class="portrait" id="portrait" aria-hidden="true"></div>
-        <div class="who">
-          <div class="name" id="hudName">—</div>
-          <div class="sub smallcaps" id="hudSub">—</div>
-        </div>
+  <!-- Lobby: one plate, three bars, one button -->
+  <section id="screen-lobby" class="screen" aria-labelledby="lobbyTitle">
+    <div id="lobbyScene" class="scenebg" aria-hidden="true"></div>
+    <div class="corner tl">
+      <button type="button" id="btnMenu" class="iiibtn frame" aria-label="Menu" aria-expanded="false"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
+    </div>
+    <div class="corner tr">
+      <button type="button" id="btnPauseL" class="btn btn-small" data-tip="Still the world. The idle tick stops.">Pause</button>
+      <button type="button" id="btnSettingsL" class="btn btn-small" data-tip="Dress, sound, records, danger.">Settings</button>
+    </div>
+    <div class="lobbycol">
+      <h1 id="lobbyTitle" tabindex="-1"><span class="seal" aria-hidden="true"></span>Murim Cultivator</h1>
+      <p class="plate"><b id="lobbyName">—</b><span class="smallcaps" id="lobbySub">—</span></p>
+      <div class="lbars" role="group" aria-label="Vital energies">
+        <div class="bar hp" id="barHpL" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i><b id="hpInL">–</b></div>
+        <div class="bar qi" id="barQiL" role="progressbar" aria-label="Qi" aria-valuemin="0" aria-valuemax="20" aria-valuenow="20"><i></i><b id="qiInL">–</b></div>
+        <div class="bar cult" id="barCultL" role="progressbar" aria-label="Cultivation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i><b id="cultInL">–</b></div>
       </div>
-      <div class="hud-bars" role="group" aria-label="Vital energies">
-        <div class="vital"><span class="vlabel">HP</span><div class="bar hp" id="barHp" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i><b id="hpIn">–</b></div></div>
-        <div class="vital"><span class="vlabel">Qi</span><div class="bar qi" id="barQi" role="progressbar" aria-label="Qi" aria-valuemin="0" aria-valuemax="20" aria-valuenow="20"><i></i><b id="qiIn">–</b></div></div>
-        <div class="vital"><span class="vlabel">Cult</span><div class="bar cult" id="barCult" role="progressbar" aria-label="Cultivation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i><b id="cultIn">–</b></div></div>
-      </div>
-      <div class="chips" id="curChips" aria-label="Currencies"></div>
-      <div class="chips" id="statChips" aria-label="Combat stats"></div>
-      <div class="hudbtns">
-        <button type="button" id="btnPauseChip" class="chipbtn" data-tip="Still the world. The idle tick stops.">Pause</button>
-        <button type="button" id="btnHelp" class="chipbtn" data-tip="How the mountain works, in six lines.">Help</button>
-        <button type="button" id="btnSettings" class="chipbtn" data-tip="Dress, sound, records, danger.">Settings</button>
-      </div>
-    </header>
-
-    <button type="button" id="goalStrip" class="goalstrip frame">
-      <span class="seal" aria-hidden="true"></span>
-      <span class="smallcaps">Next</span>
-      <span id="goalText">—</span>
-    </button>
-
-    <div id="dash">
-      <div class="col" id="colLeft">
-        <section class="panel frame" id="p-cult" aria-label="Cultivate">
-          <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Cultivate</span><span class="rmark" data-ready="cult" hidden>ready</span></div>
-          <div class="pbody">
-            <div class="focuschips" role="radiogroup" aria-label="Attention">
-              <label class="fchip" data-tip="A quarter more cultivation."><input type="radio" name="focus" value="cult" checked /><span>Circulate</span></label>
-              <label class="fchip" data-tip="Near a third more gathering."><input type="radio" name="focus" value="gather" /><span>Sense</span></label>
-              <label class="fchip" data-tip="Harder strikes, richer kills."><input type="radio" name="focus" value="fight" /><span>Temper</span></label>
-            </div>
-            <div class="chips" id="rateChips"></div>
-            <p class="toggles">
-              <label class="switch"><input type="checkbox" id="optCult2" checked /><span>Cultivate</span><b>On</b></label>
-              <label class="switch"><input type="checkbox" id="optBreak2" checked /><span>Breakthrough</span><b>On</b></label>
-            </p>
-            <p class="btnrow">
-              <button type="button" id="btnMed2" class="btn" data-tip="Three seconds of idle gain, at once. Key Space when idle.">Meditate</button>
-              <button type="button" id="btnBreak2" class="btn btn-primary" data-tip="Spend a full measure for the next stage.">Breakthrough</button>
-              <button type="button" id="btnDoor2" class="btn" data-tip="Thirty breaths at triple gain.">Closed door</button>
-              <span id="doorT2" class="dim"></span>
-            </p>
-            <p class="dim" id="cultInfo"></p>
-          </div>
-        </section>
-        <section class="panel frame" id="p-gather" aria-label="Gather">
-          <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Gather</span>
-            <label class="switch mini"><input type="checkbox" id="optGather" checked /><span>Auto</span><b>On</b></label>
-          </div>
-          <div class="pbody"><div class="tiles2" id="nodes"></div></div>
-        </section>
-        <section class="panel frame grow" id="p-forge" aria-label="Forge">
-          <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Forge</span><span class="rmark" data-ready="forge" hidden>ready</span></div>
-          <div class="pbody"><div class="tiles2" id="recipes"></div>
-            <div class="psub">Worn arms</div><div class="tiles2" id="gearCards"></div></div>
-        </section>
-      </div>
-
-      <div class="col" id="colMid">
-        <div class="stagewrap frame">
-          <div class="carve"><span class="seal" aria-hidden="true"></span><span id="stageTitle">Azure Hills</span></div>
-          <div id="stageMount" class="stage" role="img" aria-label="The mountain at dawn"></div>
-          <div id="foePlate" hidden><b>—</b><div class="foehp" role="progressbar" aria-label="Foe health"><i></i></div></div>
-          <div id="floats" aria-hidden="true"></div>
-          <div id="banner" class="banner" hidden></div>
-          <div id="pausedVeil" class="pausedveil" hidden>Paused</div>
-          <div id="tipBubble" class="tipbubble" hidden>
-            <span id="tipText"></span>
-            <span class="tipbtns"><button type="button" id="tipSkip" class="btn btn-small">Skip tips</button></span>
-          </div>
-        </div>
-        <div class="actionbar frame" role="toolbar" aria-label="Actions">
-          <button type="button" id="actPrimary" class="btn btn-primary">Meditate</button>
-          <button type="button" id="actBurst" class="btn" data-tip="Ten qi for a heavy exchange. Key Q.">Qi burst</button>
-          <button type="button" id="actFlee" class="btn btn-quiet" hidden>Withdraw</button>
-          <button type="button" id="actEat" class="btn" data-tip="Chew one herb for 25 health. Key E.">Eat herb</button>
-          <button type="button" id="actPill" class="btn" data-tip="Swallow a pill: full qi and cultivation.">Pill</button>
-          <button type="button" id="actDoor" class="btn doorfill" data-tip="Thirty breaths behind a closed door at triple gain."><i></i><b>Closed door</b></button>
-        </div>
-        <div class="autobar frame" role="group" aria-label="Unattended work">
-          <label class="switch mini"><input type="checkbox" id="optCult" checked /><span>Cultivate</span><b>On</b></label>
-          <label class="switch mini"><input type="checkbox" id="optBreak" checked /><span>Breakthrough</span><b>On</b></label>
-          <label class="switch mini"><input type="checkbox" id="optGather2" checked /><span>Gather</span><b>On</b></label>
-          <label class="switch mini"><input type="checkbox" id="optFight" /><span>Re-fight</span><b>Off</b></label>
-          <label class="switch mini"><input type="checkbox" id="optHeal" checked /><span>Herbs</span><b>Off</b></label>
-        </div>
-        <section class="panel frame" id="p-fight" aria-label="Fight">
-          <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Fight</span></div>
-          <div class="pbody"><div class="tiles3" id="foes"></div>
-            <p id="battleLine">No battle. Choose a foe above, or climb the tower.</p></div>
-        </section>
-        <div class="duopanel grow" id="p-boss">
-          <section class="panel frame" aria-label="Tyrants">
-            <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Tyrants</span><span class="rmark" data-ready="boss" hidden>ready</span></div>
-            <div class="pbody"><div class="tiles2" id="bosses"></div></div>
-          </section>
-          <section class="panel frame" aria-label="Tower">
-            <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Tower · <span id="towerNum">0</span></span>
-              <label class="switch mini"><input type="checkbox" id="optTower" /><span>Climb</span><b>Off</b></label>
-            </div>
-            <div class="pbody"><div class="tiles1" id="towerBox"></div></div>
-          </section>
-        </div>
-      </div>
-
-      <div class="col" id="colRight">
-        <section class="panel frame" id="p-char" aria-label="Character">
-          <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Character</span><span class="rmark" data-ready="char" hidden>ready</span></div>
-          <div class="pbody">
-            <div class="charrow">
-              <div class="charsvg" id="charSvg" aria-hidden="true"></div>
-              <div class="eqstack">
-                <div class="slot" id="eqWeapon" data-tip="Weapon. Forged arms land here."><span class="slotname">Weapon</span><b>bare hands</b></div>
-                <div class="slot" id="eqArmor" data-tip="Armor. Robes and plates land here."><span class="slotname">Armor</span><b>rags</b></div>
-                <div class="slot" id="eqCharm" data-tip="Charm. Jade and seals land here."><span class="slotname">Charm</span><b>none</b></div>
-              </div>
-              <dl id="charStats" class="record"></dl>
-            </div>
-            <div class="chips" id="pouchChips"></div>
-            <div id="rebirthBox"></div>
-          </div>
-        </section>
-        <section class="panel frame" id="p-skills" aria-label="Skills">
-          <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Skills · <span id="skStones">0</span> stones · <span id="skSeeds">0</span> seeds</span><span class="rmark" data-ready="skills" hidden>ready</span></div>
-          <div class="pbody">
-            <svg id="treeLines" aria-hidden="true"></svg>
-            <div id="skills"></div>
-            <div id="skillDetail" class="detail" hidden></div>
-          </div>
-        </section>
-        <section class="panel frame grow" id="p-log" aria-label="Chronicle">
-          <div class="ptitle"><span class="seal" aria-hidden="true"></span><span>Chronicle</span>
-            <span class="filters" role="group" aria-label="Chronicle filter">
-              <button type="button" data-f="all" class="chipbtn on" aria-pressed="true">All</button>
-              <button type="button" data-f="combat" class="chipbtn" aria-pressed="false">Combat</button>
-              <button type="button" data-f="loot" class="chipbtn" aria-pressed="false">Loot</button>
-              <button type="button" data-f="sys" class="chipbtn" aria-pressed="false">System</button>
-              <button type="button" id="btnClear" class="chipbtn">Sweep</button>
-            </span>
-          </div>
-          <div class="pbody"><div id="log" aria-live="polite"></div></div>
-        </section>
+      <p class="cultbtnrow"><button type="button" id="btnCultivate" class="btn btn-primary btn-cultivate">Cultivate</button><span id="cultReady" class="readymark" hidden>ready</span></p>
+      <p class="goalwrap"><button type="button" id="goalLine" class="goalline"><span class="smallcaps">Next · </span><span id="goalTextL">—</span></button></p>
+      <div id="tipBubbleL" class="tipbubble" hidden>
+        <span id="tipTextL"></span>
+        <span class="tipbtns"><button type="button" id="tipSkipL" class="btn btn-small">Skip tips</button></span>
       </div>
     </div>
-
-    <footer class="foot" id="foot">MURIM CULTIVATOR v3-phase4 | Space acts | Q burst | E eat | F flee</footer>
+    <div id="pausedVeilL" class="pausedveil" hidden>Paused</div>
+    <footer class="foot" id="footL">MURIM CULTIVATOR v3-phase5</footer>
   </section>
+
+  <!-- Cultivate: the avatar, dead center -->
+  <section id="screen-cultivate" class="screen" aria-labelledby="cultTitle">
+    <div id="cultScene" class="scenebg" aria-hidden="true"></div>
+    <h2 id="cultTitle" class="sr" tabindex="-1">Cultivate</h2>
+    <div class="corner tl btnrow">
+      <button type="button" id="btnMenuC" class="iiibtn frame" aria-label="Menu" aria-expanded="false"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
+      <button type="button" id="btnLobby" class="btn btn-small btn-quiet">Back to lobby</button>
+    </div>
+    <div class="corner tr btnrow">
+      <button type="button" id="btnPauseC" class="btn btn-small" data-tip="Still the world. The idle tick stops.">Pause</button>
+      <button type="button" id="btnSettingsC" class="btn btn-small" data-tip="Dress, sound, records, danger.">Settings</button>
+    </div>
+    <div class="cultgrid">
+      <div class="cultcol">
+        <div class="focuscards" role="radiogroup" aria-label="Attention">
+          <label class="focuscard" data-tip="A quarter more cultivation."><input type="radio" name="focus" value="cult" checked /><b>Circulate Qi</b><span>More cultivation.</span></label>
+          <label class="focuscard" data-tip="Near a third more gathering."><input type="radio" name="focus" value="gather" /><b>Sense Herbs</b><span>More gathering.</span></label>
+          <label class="focuscard" data-tip="Harder strikes, richer kills."><input type="radio" name="focus" value="fight" /><b>Temper Body</b><span>Harder strikes.</span></label>
+        </div>
+        <div class="chips" id="rateChipsC"></div>
+      </div>
+      <div class="spritestage">
+        <div id="spriteBox"></div>
+        <div id="floatsC" aria-hidden="true"></div>
+        <div id="banner" class="banner" hidden></div>
+        <div id="tipBubbleC" class="tipbubble" hidden>
+          <span id="tipTextC"></span>
+          <span class="tipbtns"><button type="button" id="tipSkipC" class="btn btn-small">Skip tips</button></span>
+        </div>
+      </div>
+      <div class="cultcol">
+        <p class="btnrow colbtns">
+          <button type="button" id="btnMedC" class="btn" data-tip="Three seconds of idle gain, at once. Key Space.">Meditate</button>
+          <button type="button" id="btnBreakC" class="btn btn-primary btn-tall" data-tip="Spend a full measure for the next stage.">Breakthrough</button>
+          <button type="button" id="btnDoorC" class="btn doorfill" data-tip="Thirty breaths at triple gain."><i></i><b>Closed door x3</b></button>
+        </p>
+        <p class="toggles">
+          <label class="switch"><input type="checkbox" id="optCultC" checked /><span>Cultivate</span><b>On</b></label>
+          <label class="switch"><input type="checkbox" id="optBreakC" checked /><span>Breakthrough</span><b>On</b></label>
+        </p>
+        <p class="dim" id="cultNeed"></p>
+      </div>
+    </div>
+    <div class="cbars" role="group" aria-label="Vital energies">
+      <div class="bar hp" id="barHpC" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i><b id="hpInC">–</b></div>
+      <div class="bar qi" id="barQiC" role="progressbar" aria-label="Qi" aria-valuemin="0" aria-valuemax="20" aria-valuenow="20"><i></i><b id="qiInC">–</b></div>
+      <div class="bar cult" id="barCultC" role="progressbar" aria-label="Cultivation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i><b id="cultInC">–</b></div>
+    </div>
+    <div id="pausedVeilC" class="pausedveil" hidden>Paused</div>
+  </section>
+
+  <!-- III drawer -->
+  <div id="drawerBackdrop" hidden></div>
+  <aside id="drawer" aria-label="Menu" hidden>
+    <div class="carve"><span class="seal" aria-hidden="true"></span><span>Menu</span></div>
+    <nav id="drawerNav" aria-label="Sections"></nav>
+  </aside>
 
   <div id="modalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal frame">
@@ -232,6 +161,8 @@ try {
 <script src="js/formulas.js"></script>
 <script src="js/state.js"></script>
 <script src="js/stage.js"></script>
+<script src="js/avatar.js"></script>
+<script src="js/router.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/actions.js"></script>
 <script src="js/loop.js"></script>

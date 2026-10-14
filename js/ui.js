@@ -1,8 +1,8 @@
-/* Murim Cultivator v3-phase4 — view layer, one-screen dashboard.
-   All panels live at once; no tabs, no switching. Targeted updaters
-   only; lists rebuild when MC.dirty.lists is set. Dynamic text travels
-   via textContent, never innerHTML. Inline styles: --p widths and SVG
-   geometry only. */
+/* Murim Cultivator v3-phase5 — view layer: lobby, drawer, cultivate.
+   Targeted updaters only. Dynamic text travels via textContent, never
+   innerHTML. Inline styles: --p widths and SVG geometry only. The
+   Chronicle is gone; MC.log keeps a capped in-memory record so the
+   simulation's voice is never lost. */
 var MC = window.MC || {};
 window.MC = MC;
 
@@ -11,21 +11,19 @@ function $(id) { return document.getElementById(id); }
 /* ---- cached refs ---- */
 var R = {};
 MC.cacheDom = function () {
-  var ids = ["hudName", "hudSub", "portrait", "barHp", "barQi", "barCult",
-    "curChips", "statChips", "btnPauseChip", "tickN", "goalStrip", "goalText", "stageMount",
-    "floats", "banner", "pausedVeil", "tipBubble", "tipText", "tipSkip", "foePlate",
-    "actPrimary", "actBurst", "actDoor", "actEat", "actPill", "actFlee",
-    "optCult", "optBreak", "optGather", "optGather2", "optFight", "optHeal", "optTower",
-    "optCult2", "optBreak2", "btnMed2", "btnBreak2", "btnDoor2", "doorT2",
-    "cultInfo", "rateChips", "nodes", "recipes", "gearCards", "foes", "battleLine",
-    "bosses", "towerBox", "towerNum", "skills", "skillDetail", "treeLines", "skStones", "skSeeds",
-    "eqWeapon", "eqArmor", "eqCharm", "charSvg", "charStats", "pouchChips", "rebirthBox",
-    "saveMsg", "log", "wideNotice", "foot",
-    "modalOverlay", "modalTitle", "modalBody", "modalBtns", "toasts",
-    "screen-main", "inName", "userErr", "btnContinue", "hasSave", "pathRow", "pathNameEcho",
+  var ids = ["lobbyName", "lobbySub", "barHpL", "barQiL", "barCultL",
+    "btnCultivate", "cultReady", "goalLine", "goalTextL", "lobbyScene",
+    "btnPauseL", "btnSettingsL", "pausedVeilL", "tipBubbleL", "tipTextL", "tipSkipL",
+    "btnMenu", "btnMenuC", "drawer", "drawerBackdrop", "drawerNav",
+    "btnLobby", "btnPauseC", "btnSettingsC", "rateChipsC",
+    "btnMedC", "btnBreakC", "btnDoorC", "cultNeed", "optCultC", "optBreakC",
+    "barHpC", "barQiC", "barCultC", "spriteBox", "floatsC", "banner", "pausedVeilC",
+    "tipBubbleC", "tipTextC", "tipSkipC", "cultScene", "lobbyScene",
+    "modalOverlay", "modalTitle", "modalBody", "modalBtns", "toasts", "stageTitle",
+    "inName", "userErr", "btnContinue", "hasSave", "pathRow", "pathNameEcho",
     "pathErr", "btnToGame"];
   for (var i = 0; i < ids.length; i++) R[ids[i]] = $(ids[i]);
-  R.focusRadios = document.querySelectorAll('input[name="focus"]');
+  R.focusRadios = document.querySelectorAll('#screen-cultivate input[name="focus"]');
 };
 MC.snap = {};
 MC.setText = function (el, key, val) {
@@ -57,53 +55,22 @@ MC.clock = function () {
   return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
 };
 
-/* ---- chronicle: typed, timestamped, collapsed, filterable ---- */
-MC._lastKey = null; MC._lastEl = null; MC._lastN = 0;
+/* ---- in-memory chronicle (no panel this phase; toasts carry the news) ---- */
+MC._logStore = [];
+MC._lastKey = null; MC._lastN = 0;
 MC.log = function (m, tone, kind) {
-  var b = R.log;
-  if (!b) return;
   kind = kind || "sys";
-  tone = tone || "";
-  var key = kind + "|" + tone + "|" + m;
-  if (key === MC._lastKey && MC._lastEl && MC._lastEl.isConnected) {
+  var key = kind + "|" + (tone || "") + "|" + m;
+  if (key === MC._lastKey && MC._logStore.length) {
     MC._lastN += 1;
-    var rep = MC._lastEl.querySelector(".rep");
-    if (rep) rep.textContent = " x" + MC._lastN;
+    MC._logStore[0].rep = MC._lastN;
     return;
   }
-  var d = document.createElement("div");
-  d.dataset.kind = kind;
-  if (tone) d.classList.add(tone);
-  d.classList.add("k-" + kind);
-  var ts = document.createElement("span");
-  ts.className = "ts";
-  ts.textContent = MC.clock();
-  d.appendChild(ts);
-  var s = document.createElement("span");
-  s.textContent = m;
-  d.appendChild(s);
-  var r2 = document.createElement("span");
-  r2.className = "rep";
-  d.appendChild(r2);
-  if (S.ui.logFilter !== "all" && S.ui.logFilter !== kind) d.hidden = true;
-  b.prepend(d);
-  while (b.children.length > MC.CONFIG.LOG_CAP) b.lastChild.remove();
-  MC._lastKey = key; MC._lastEl = d; MC._lastN = 1;
+  MC._logStore.unshift({ t: MC.clock(), m: m, kind: kind, rep: 1 });
+  while (MC._logStore.length > MC.CONFIG.LOG_CAP) MC._logStore.pop();
+  MC._lastKey = key; MC._lastN = 1;
 };
-MC.applyFilter = function () {
-  var f = S.ui.logFilter;
-  var btns = document.querySelectorAll(".filters button[data-f]");
-  for (var i = 0; i < btns.length; i++) {
-    var on = btns[i].dataset.f === f;
-    btns[i].classList.toggle("on", on);
-    btns[i].setAttribute("aria-pressed", on ? "true" : "false");
-  }
-  if (!R.log) return;
-  for (var j = 0; j < R.log.children.length; j++) {
-    var d = R.log.children[j];
-    d.hidden = !(f === "all" || d.dataset.kind === f);
-  }
-};
+MC.applyFilter = function () {};
 
 /* ---- toasts, floats, banners, chimes ---- */
 MC.toast = function (m) {
@@ -120,14 +87,14 @@ MC.still = function () {
     (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 };
 MC.float = function (txt, kind) {
-  if (!R.floats) return;
-  if (R.floats.children.length >= 10) R.floats.firstChild.remove();
+  if (!R.floatsC) return;
+  if (R.floatsC.children.length >= 10) R.floatsC.firstChild.remove();
   var s = document.createElement("span");
   s.className = "float " + (kind || "hit");
   s.textContent = txt;
   s.style.left = (15 + Math.random() * 60) + "%";
   s.style.top = (30 + Math.random() * 35) + "%";
-  R.floats.appendChild(s);
+  R.floatsC.appendChild(s);
   if (MC.still()) {
     setTimeout(function () { if (s.isConnected) s.remove(); }, 600);
   } else {
@@ -143,13 +110,6 @@ MC.showBanner = function (txt, fail) {
   b.classList.remove("show", "hide");
   void b.offsetWidth;
   b.classList.add("show");
-  if (!MC.still() && MC.stage) {
-    MC.stage.svg.classList.remove("shake");
-    if (fail) {
-      void MC.stage.svg.getBoundingClientRect();
-      MC.stage.svg.classList.add("shake");
-    }
-  }
   setTimeout(function () {
     b.classList.add("hide");
     setTimeout(function () { b.hidden = true; b.classList.remove("show", "hide"); }, 450);
@@ -178,26 +138,6 @@ MC.sfx = function (name) {
   } catch (e) {}
 };
 
-/* ---- navigation without tabs: flash the panel the goal points at ---- */
-MC.PANELS = ["cult", "gather", "forge", "fight", "boss", "skills", "char"];
-MC.show = function (id) {
-  var ss = document.querySelectorAll(".screen");
-  for (var i = 0; i < ss.length; i++) ss[i].classList.remove("active");
-  $(id).classList.add("active");
-};
-MC.flashPanel = function (m) {
-  var map = { cult: "p-cult", gather: "p-gather", forge: "p-forge", fight: "p-fight",
-    boss: "p-boss", skills: "p-skills", char: "p-char", tower: "p-boss" };
-  var el = $(map[m] || "p-cult");
-  if (!el) return;
-  el.classList.remove("flash");
-  void el.offsetWidth;
-  el.classList.add("flash");
-  setTimeout(function () { el.classList.remove("flash"); }, 1200);
-};
-/* S.ui.panel is retired: kept in saves, never read. */
-MC.showMenu = function (m) { MC.flashPanel(m); };
-
 /* ---- settings reach the document ---- */
 MC.applyUI = function () {
   document.body.dataset.theme = S.ui.theme === "night" ? "night" : "day";
@@ -209,16 +149,8 @@ MC.syncSettingsUI = function () {
   for (var i = 0; i < R.focusRadios.length; i++) {
     R.focusRadios[i].checked = R.focusRadios[i].value === S.settings.focus;
   }
-  MC.syncSwitch(R.optCult, S.settings.autoCult);
-  MC.syncSwitch(R.optCult2, S.settings.autoCult);
-  MC.syncSwitch(R.optBreak, S.settings.autoBreak);
-  MC.syncSwitch(R.optBreak2, S.settings.autoBreak);
-  MC.syncSwitch(R.optGather, S.settings.autoGather);
-  MC.syncSwitch(R.optGather2, S.settings.autoGather);
-  MC.syncSwitch(R.optFight, S.settings.autoFight);
-  MC.syncSwitch(R.optHeal, S.settings.autoHeal);
-  MC.syncSwitch(R.optTower, S.settings.autoTower);
-  MC.applyFilter();
+  MC.syncSwitch(R.optCultC, S.settings.autoCult);
+  MC.syncSwitch(R.optBreakC, S.settings.autoBreak);
 };
 MC.syncSwitch = function (input, on) {
   if (!input) return;
@@ -230,7 +162,7 @@ MC.syncSwitch = function (input, on) {
   }
 };
 
-/* ---- bars, chips, records ---- */
+/* ---- bars, chips ---- */
 MC.setBar = function (id, key, cur, max, txt, cls) {
   var el = $(id);
   if (!el) return;
@@ -263,31 +195,6 @@ MC.chip = function (glyph, text, tip) {
   c.appendChild(MC.glyph(glyph, 14));
   var t = document.createElement("span");
   t.textContent = text;
-  c.appendChild(t);
-  return c;
-};
-MC.record = function (el, rows) {
-  var sig = rows.map(function (r) { return r[0] + "=" + r[1]; }).join(";");
-  if (MC.snap[el.id] === sig) return;
-  MC.snap[el.id] = sig;
-  el.textContent = "";
-  for (var i = 0; i < rows.length; i++) {
-    var w = document.createElement("div");
-    var t = document.createElement("dt"); t.textContent = rows[i][0];
-    var v = document.createElement("dd"); v.textContent = rows[i][1];
-    w.appendChild(t); w.appendChild(v);
-    el.appendChild(w);
-  }
-};
-MC.costChip = function (k, have, need) {
-  var c = document.createElement("span");
-  var ok = have >= need;
-  c.className = "costchip " + (ok ? "ok" : "no");
-  c.setAttribute("data-tip", ok ? have + " " + k + " in hand" : "wanting " + (need - have) + " " + k);
-  c.setAttribute("tabindex", "0");
-  c.appendChild(MC.glyph(k === "gold" ? "coin" : k, 12));
-  var t = document.createElement("span");
-  t.textContent = have + "/" + need;
   c.appendChild(t);
   return c;
 };
@@ -327,160 +234,67 @@ MC.nextGoal = function () {
   return { t: "Meditate. Cultivation accrues each second.", panel: "cult" };
 };
 
-/* ---- header, bars, currencies, action bar: only changed nodes ---- */
+/* ---- per-tick: lobby plate, both bar sets, goal, avatar, tips ---- */
 MC.updateStatus = function () {
   var rm = MC.rMax();
-  MC.setText(R.hudName, "hn", S.name || "Nameless");
-  MC.setText(R.hudSub, "hs", (S.path || "pathless").toUpperCase() + " · " + MC.rName());
+  MC.setText(R.lobbyName, "hn", S.name || "Nameless");
+  MC.setText(R.lobbySub, "hs", (S.path || "pathless").toUpperCase() + " · " + MC.rName());
   var hpCls = S.hp <= S.maxHp * 0.25 ? "low" : (S.hp <= S.maxHp * 0.5 ? "warn" : "");
   var hpTxt = Math.ceil(S.hp) + "/" + MC.fmt(S.maxHp) + (hpCls === "low" ? " critical" : hpCls ? " low" : "");
-  MC.setBar("barHp", "bhp", S.hp, S.maxHp, hpTxt, hpCls);
-  MC.setBar("barQi", "bqi", S.qi, S.maxQi, Math.floor(S.qi) + "/" + MC.fmt(S.maxQi));
+  MC.setBar("barHpL", "bhpl", S.hp, S.maxHp, hpTxt, hpCls);
+  MC.setBar("barQiL", "bqil", S.qi, S.maxQi, Math.floor(S.qi) + "/" + MC.fmt(S.maxQi));
   var ready = S.cult >= rm;
-  MC.setBar("barCult", "bcu", S.cult, rm,
-    ready ? "Ready " + MC.fmt(S.cult) + "/" + MC.fmt(rm) : MC.fmt(S.cult) + "/" + MC.fmt(rm),
-    ready ? "ready" : "");
-  MC.setText(R.tickN, "tk", null);
-  if (R.tickN) R.tickN.textContent = "";
-  MC.currencies();
-  MC.combatChips();
-  MC.setText(R.cultInfo, "ci", ready
-    ? "The measure is full. Breakthrough stands at " + Math.round(MC.breakChance() * 100) +
-      " in a hundred." + (S.pity > 0 ? " Pity adds " + Math.round(S.pity * MC.CONFIG.PITY_STEP * 100) + "." : "")
-    : MC.fmt(Math.ceil(rm - S.cult)) + " cultivation short of the attempt." +
-      (S.pity > 0 ? " Pity adds " + Math.round(S.pity * MC.CONFIG.PITY_STEP * 100) + "." : ""));
-  var bb = R.btnBreak2;
-  if (bb) bb.classList.toggle("ready-mark", ready);
-  MC.setText(R.doorT2, "dl", Date.now() < S.doorUntil
-    ? "Behind the door: " + Math.ceil((S.doorUntil - Date.now()) / 1000) + " breaths of triple gain." : "");
-  MC.setText(R.battleLine, "bl", MC.battle
-    ? "You, " + Math.ceil(S.hp) + " health, against " + MC.battle.f.t + ", " +
-      Math.ceil(MC.battle.hp) + " of " + MC.fmt(MC.battle.max) + "."
-    : "No battle. Choose a foe above, or climb the tower.");
-  MC.actionBar();
-  MC.goal();
-  MC.readyMarks();
-  MC.tips();
-  MC.setText(R.skStones, "ss", MC.fmt(S.stones));
-  MC.setText(R.skSeeds, "sd", MC.fmt(S.seeds));
-  MC.setText(R.towerNum, "tw", MC.fmt(S.tower));
-  R.pausedVeil.hidden = !MC.paused;
-  MC.setText(R.btnPauseChip, "pz", MC.paused ? "Resume" : "Pause");
-  if (R.wideNotice) R.wideNotice.hidden = !(window.innerWidth < 1280);
-};
-MC.currencies = function () {
-  var sig = [S.gold, S.stones, S.seeds].join(",");
-  if (MC.snap.cur === sig) return;
-  MC.snap.cur = sig;
-  R.curChips.textContent = "";
-  R.curChips.appendChild(MC.chip("coin", MC.fmt(S.gold) + " gold", "Gold. Kills feed the purse; the forge spends it."));
-  R.curChips.appendChild(MC.chip("stone", MC.fmt(S.stones) + " stones", "Spirit stones. Kills and tower floors pay them; techniques spend them."));
-  R.curChips.appendChild(MC.chip("seed", MC.fmt(S.seeds) + " seeds", "Dao seeds. Paid on rebirth; spent on deep techniques."));
-};
-MC.combatChips = function () {
-  var sig = [MC.tAtk(), MC.tDef(), MC.tSpi()].join(",");
-  if (MC.snap.sc === sig) return;
-  MC.snap.sc = sig;
-  R.statChips.textContent = "";
-  R.statChips.appendChild(MC.chip("sword", "ATK " + MC.fmt(MC.tAtk()),
-    "Strike strength: base " + S.atk + (S.path === "sword" ? ", +30% of the Sword path" : "") +
-    ", techniques, and worn arms."));
-  R.statChips.appendChild(MC.chip("shield", "DEF " + MC.fmt(MC.tDef()),
-    "Guard: base " + S.def + (S.path === "body" ? ", +3 of the Body path" : "") +
-    ", techniques, and worn armor."));
-  R.statChips.appendChild(MC.chip("core", "SPI " + MC.fmt(MC.tSpi()),
-    "Spirit: sharper crits, heavier bursts, steadier breakthroughs."));
-};
-/* action bar: one primary, honest secondaries */
-MC.actionBar = function () {
-  var label = MC.battle ? "Strike" : (S.cult >= MC.rMax() ? "Breakthrough" : "Meditate");
-  MC.setText(R.actPrimary, "ap", label);
-  R.actPrimary.classList.toggle("ready-mark", !MC.battle && S.cult >= MC.rMax());
-  var canBurst = S.qi >= 10;
-  if (!!R.actBurst.disabled === canBurst) {
-    R.actBurst.disabled = !canBurst;
-    R.actBurst.setAttribute("data-tip", canBurst ? "Ten qi for a heavy exchange. Key Q." : "Wanting 10 qi; circulate first.");
-  }
-  var dbl = R.actDoor.querySelector("b");
-  var door = Date.now() < S.doorUntil;
-  var dlab = door ? "Door: " + Math.ceil((S.doorUntil - Date.now()) / 1000) + "s" : "Closed door";
-  if (MC.snap.ad !== dlab) { MC.snap.ad = dlab; dbl.textContent = dlab; }
-  R.actDoor.style.setProperty("--p", door ? ((S.doorUntil - Date.now()) / 300 + "%") : "0%");
-  var canEat = S.inv.herb > 0 && S.hp < S.maxHp;
-  if (!!R.actEat.disabled === canEat) {
-    R.actEat.disabled = !canEat;
-    R.actEat.setAttribute("data-tip", S.inv.herb <= 0 ? "No herbs; gather first." : (S.hp >= S.maxHp ? "Already whole." : "Chew one herb for 25 health. Key E."));
-  }
-  var canPill = S.inv.pill > 0 || S.inv.bigpill > 0;
-  if (!!R.actPill.disabled === canPill) {
-    R.actPill.disabled = !canPill;
-    R.actPill.setAttribute("data-tip", canPill ? "Swallow a pill: full qi and cultivation." : "No pills; the forge is waiting.");
-  }
-  R.actFlee.hidden = !MC.battle;
-};
-/* goal strip: text changes only */
-MC.goal = function () {
+  var cultTxt = ready ? "Ready " + MC.fmt(S.cult) + "/" + MC.fmt(rm) : MC.fmt(S.cult) + "/" + MC.fmt(rm);
+  MC.setBar("barCultL", "bcul", S.cult, rm, cultTxt, ready ? "ready" : "");
+  MC.setBar("barHpC", "bhpc", S.hp, S.maxHp, hpTxt, hpCls);
+  MC.setBar("barQiC", "bqic", S.qi, S.maxQi, Math.floor(S.qi) + "/" + MC.fmt(S.maxQi));
+  MC.setBar("barCultC", "bcuc", S.cult, rm, cultTxt, ready ? "ready" : "");
+  if (R.btnCultivate) R.btnCultivate.disabled = MC.paused;
+  if (R.cultReady) R.cultReady.hidden = !ready;
   var g = MC.nextGoal();
   if (MC.snap.goal !== g.t) {
     MC.snap.goal = g.t;
     MC._goalPanel = g.panel;
-    R.goalText.textContent = g.t;
+    R.goalTextL.textContent = g.t;
   }
-};
-/* ready marks live on panel title bars now, not on tabs */
-MC.readyMarks = function () {
-  var rm = MC.rMax();
-  var afford = MC.RECIPES.some(function (r) {
-    return Object.entries(r.c).every(function (kv) { return (S.inv[kv[0]] || 0) >= kv[1]; });
-  });
-  var foe = MC.BOSSES.some(function (b) { return !S.bosses.includes(b.id) && S.realm >= b.realm; });
-  var learn = false;
-  for (var pi = 0; pi < MC.PATHS.length && !learn; pi++) {
-    var chain = MC.SKILLS.filter(function (s) { return s.path === MC.PATHS[pi].id; });
-    for (var i = 0; i < chain.length; i++) {
-      if (MC.has(chain[i].id)) continue;
-      if (i > 0 && !MC.has(chain[i - 1].id)) break;
-      var c = chain[i].cost;
-      if (c.seeds ? S.seeds >= c.seeds : S.stones >= c.stones) learn = true;
-      break;
-    }
+  MC.setText(R.cultNeed, "cn", ready
+    ? "The measure is full. Breakthrough stands at " + Math.round(MC.breakChance() * 100) +
+      " in a hundred." + (S.pity > 0 ? " Pity adds " + Math.round(S.pity * MC.CONFIG.PITY_STEP * 100) + "." : "")
+    : MC.fmt(Math.ceil(rm - S.cult)) + " cultivation short of the attempt." +
+      (S.pity > 0 ? " Pity adds " + Math.round(S.pity * MC.CONFIG.PITY_STEP * 100) + "." : ""));
+  var dbl = R.btnDoorC ? R.btnDoorC.querySelector("b") : null;
+  var door = Date.now() < S.doorUntil;
+  if (dbl) {
+    var dlab = door ? "Door: " + Math.ceil((S.doorUntil - Date.now()) / 1000) + "s" : "Closed door x3";
+    if (MC.snap.ad !== dlab) { MC.snap.ad = dlab; dbl.textContent = dlab; }
   }
-  var marks = { cult: S.cult >= rm, forge: afford, boss: foe, skills: learn,
-    char: MC.canRebirth() && MC.seedsFor(S.totalCult) > 0 };
-  var els = document.querySelectorAll(".rmark[data-ready]");
-  for (var k = 0; k < els.length; k++) {
-    var on = !!marks[els[k].getAttribute("data-ready")];
-    if (els[k].hidden === on) els[k].hidden = !on;
+  if (R.btnDoorC) R.btnDoorC.style.setProperty("--p", door ? ((S.doorUntil - Date.now()) / 300 + "%") : "0%");
+  var bb = R.btnBreakC;
+  if (bb) bb.classList.toggle("ready-mark", ready);
+  MC.setText(R.btnPauseL, "pzl", MC.paused ? "Resume" : "Pause");
+  MC.setText(R.stageTitle, "stt", MC.REALMS[S.realm].n);
+  MC.setText(R.btnPauseC, "pzc", MC.paused ? "Resume" : "Pause");
+  if (R.pausedVeilL) R.pausedVeilL.hidden = !MC.paused;
+  if (R.pausedVeilC) R.pausedVeilC.hidden = !MC.paused;
+  var mount = R.lobbyScene || R.cultScene;
+  if (mount && MC.snap.srealm !== S.realm) {
+    MC.snap.srealm = S.realm;
+    var l = $("lobbyScene"), c = $("cultScene");
+    if (l) l.setAttribute("data-realm", S.realm);
+    if (c) c.setAttribute("data-realm", S.realm);
   }
-};
-/* onboarding bubble: one pointer at a time, five minutes, then silence */
-MC._tipStep = 0;
-MC._tipOrder = ["med", "gather", "forge", "fight"];
-MC.tipProgress = function (tag) {
-  if (S.ui.hintsDone) return;
-  if (MC._tipOrder[MC._tipStep] === tag) {
-    MC._tipStep += 1;
-    if (MC._tipStep >= MC._tipOrder.length) { S.ui.hintsDone = true; MC.writeStore(); }
+  if (MC.avatar) {
+    MC.renderAvatar({ pose: "meditate", door: door, realm: S.realm, path: S.path });
   }
+  MC.tips();
+  void mount;
 };
-MC.tips = function () {
-  var show = S.started && !S.ui.hintsDone && S.elapsed < 300 && !MC.paused;
-  R.tipBubble.hidden = !show;
-  if (!show) return;
-  var texts = [
-    "New here? Press Meditate — or Space — then let the seconds work.",
-    "The Gather panel, left side, sets a hand to each ground.",
-    "The Forge panel, left side, spends what the grounds provide.",
-    "The Fight panel, middle, is where blades are blooded."
-  ];
-  MC.setText(R.tipText, "tip", texts[Math.min(MC._tipStep, 3)]);
-};
-/* rates chips on the cultivate panel */
+/* rates chips beside the focus cards */
 MC.updateRates = function () {
   var sig = [MC.cultRate(), MC.gatherMult(), S.settings.focus].join("|");
   if (MC.snap.rates === sig) return;
   MC.snap.rates = sig;
-  var el = $("rateChips");
+  var el = $("rateChipsC");
   if (!el) return;
   el.textContent = "";
   el.appendChild(MC.chip("flame", MC.fmt1(MC.cultRate()) + "/s", "Unattended cultivation, each second."));
@@ -490,319 +304,150 @@ MC.updateRates = function () {
     el.appendChild(MC.chip(ns[n.id], MC.fmt1(n.rate * MC.gatherMult()) + "/s " + n.id, n.t + ": " + n.desc + "."));
   }
 };
+/* no lists remain this phase; the hook stays for the loop */
+MC.updateLists = function () { MC.dirty.lists = false; };
 
-/* ---- compact tiles ---- */
-MC.tile = function (opts) {
-  var d = document.createElement("div");
-  d.className = "tile" + (opts.cls ? " " + opts.cls : "");
-  var h = document.createElement("h4");
-  h.appendChild(MC.glyph(opts.glyph || "core", 14));
-  var ht = document.createElement("span");
-  ht.textContent = opts.title;
-  h.appendChild(ht);
-  d.appendChild(h);
-  if (opts.stat) {
-    var s = document.createElement("div");
-    s.className = "stat";
-    s.textContent = opts.stat;
-    d.appendChild(s);
+/* ---- onboarding: two pointers, five minutes, then silence ---- */
+MC._tipStep = 0;
+MC._tipOrder = ["open", "med"];
+MC.tipProgress = function (tag) {
+  if (S.ui.hintsDone) return;
+  if (MC._tipOrder[MC._tipStep] === tag) {
+    MC._tipStep += 1;
+    if (MC._tipStep >= MC._tipOrder.length) { S.ui.hintsDone = true; MC.writeStore(); }
   }
-  if (opts.costs) {
-    var c = document.createElement("div");
-    c.className = "costs";
-    var keys = Object.keys(opts.costs);
-    for (var i = 0; i < keys.length; i++) {
-      c.appendChild(MC.costChip(keys[i], S.inv[keys[i]] || 0, opts.costs[keys[i]]));
-    }
-    d.appendChild(c);
-  }
-  if (opts.extra) d.appendChild(opts.extra);
-  var b = document.createElement("button");
-  b.type = "button";
-  b.className = "btn" + (opts.primary ? " btn-primary" : "");
-  b.textContent = opts.btn;
-  if (opts.tip) b.setAttribute("data-tip", opts.tip);
-  if (opts.disabled) {
-    b.disabled = true;
-    if (opts.why) b.setAttribute("data-tip", opts.why);
-  }
-  b.addEventListener("click", opts.cb);
-  d.appendChild(b);
-  return d;
+};
+MC.tips = function () {
+  var show = S.started && !S.ui.hintsDone && S.elapsed < 300 && !MC.paused;
+  var onLobby = MC.screen === "lobby";
+  var bar = onLobby ? R.tipBubbleL : R.tipBubbleC;
+  var other = onLobby ? R.tipBubbleC : R.tipBubbleL;
+  if (other) other.hidden = true;
+  if (!bar) return;
+  bar.hidden = !show;
+  if (!show) return;
+  var txt = MC._tipStep === 0
+    ? "New here? Press Space — or the Cultivate button — to begin."
+    : "Press Meditate — or Space — to breathe in power.";
+  MC.setText(onLobby ? R.tipTextL : R.tipTextC, "tip", txt);
 };
 
-/* ---- lists, rebuilt only when dirty ---- */
-MC.updateLists = function () {
-  if (!MC.dirty.lists) return;
-  MC.dirty.lists = false;
-
-  R.nodes.textContent = "";
-  var gmap = { herb: "herb", ore: "ore", wood: "wood", core: "core" };
-  for (var ni = 0; ni < MC.NODES.length; ni++) {
-    (function (n) {
-      R.nodes.appendChild(MC.tile({ glyph: gmap[n.id], title: n.t,
-        stat: MC.fmt1(n.rate * MC.gatherMult()) + "/s · in hand " + MC.fmt(S.inv[n.id]),
-        btn: "Gather", tip: n.desc + ". Gather by hand at once.",
-        cb: function () { MC.act.doGather(n.id); } }));
-    })(MC.NODES[ni]);
-  }
-
-  R.recipes.textContent = "";
-  for (var ri = 0; ri < MC.RECIPES.length; ri++) {
-    (function (r) {
-      var can = Object.entries(r.c).every(function (kv) { return (S.inv[kv[0]] || 0) >= kv[1]; });
-      var slot = r.slot === "weapon" ? "sword" : r.slot === "armor" ? "shield" : (r.pill || r.bigpill ? "flame" : "seed");
-      R.recipes.appendChild(MC.tile({ glyph: slot, title: r.t, stat: r.d, costs: r.c,
-        cls: can ? "can" : "", btn: can ? "Forge" : "Wanting",
-        primary: can, tip: can ? "The price is in hand" : "Gather more first",
-        disabled: !can, why: "Price not in hand",
-        cb: function () { MC.act.doCraft(r.id); } }));
-    })(MC.RECIPES[ri]);
-  }
-
-  R.gearCards.textContent = "";
-  if (!S.gear.length) {
-    var none = document.createElement("p");
-    none.className = "dim";
-    none.textContent = "Nothing forged yet.";
-    R.gearCards.appendChild(none);
-  }
-  for (var gi = 0; gi < S.gear.length; gi++) (function (g) {
-    var worn = S.equip[g.slot] === g.uid;
-    var rar = (MC.RARITIES.find(function (r) { return r.id === g.rar; }) || MC.RARITIES[0]).t;
-    var d = document.createElement("div");
-    d.className = "tile" + (worn ? " can" : "");
-    var h = document.createElement("h4");
-    h.appendChild(MC.glyph(g.slot === "weapon" ? "sword" : g.slot === "armor" ? "shield" : "seed", 14));
-    var ht = document.createElement("span");
-    ht.textContent = g.t + " · " + rar + " +" + (g.lvl || 0) + (worn ? " · worn" : "");
-    h.appendChild(ht);
-    d.appendChild(h);
-    var st = document.createElement("div");
-    st.className = "stat";
-    st.textContent = "Attack " + MC.fmt(MC.gearStat(g, "atk")) + " · Guard " + MC.fmt(MC.gearStat(g, "def")) +
-      ((g.spi || MC.gearStat(g, "spi")) ? " · Spirit " + MC.fmt(MC.gearStat(g, "spi")) : "");
-    d.appendChild(st);
-    var cost = MC.upgradeCost(g);
-    var maxed = (g.lvl || 0) >= MC.CONFIG.UPGRADE_MAX;
-    var affordUp = S.inv.ore >= cost.ore && S.inv.wood >= cost.wood;
-    var row = document.createElement("div");
-    row.className = "btnrow";
-    function ab(t, tip, cb, dis) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = "btn btn-small";
-      b.textContent = t;
-      b.setAttribute("data-tip", tip);
-      b.disabled = !!dis;
-      b.addEventListener("click", cb);
-      row.appendChild(b);
+/* ---- III drawer ---- */
+MC.DRAWER = [
+  { id: "lobby", label: "Lobby", glyph: "seed" },
+  { id: "cultivate", label: "Cultivate", glyph: "flame" },
+  { id: "gather", label: "Gather", glyph: "herb", soon: true },
+  { id: "forge", label: "Forge", glyph: "ore", soon: true },
+  { id: "fight", label: "Fight", glyph: "sword", soon: true },
+  { id: "tyrants", label: "Tyrants", glyph: "shield", soon: true },
+  { id: "tower", label: "Tower", glyph: "stone", soon: true },
+  { id: "character", label: "Character", glyph: "fist", soon: true },
+  { id: "skills", label: "Skills", glyph: "core", soon: true },
+  { id: "chronicle", label: "Chronicle", glyph: "wood", soon: true },
+  { id: "settings", label: "Settings", glyph: "coin" },
+  { id: "help", label: "Help", glyph: "seed" }
+];
+MC._drawerOpener = null;
+MC.buildDrawer = function () {
+  var nav = R.drawerNav;
+  if (!nav || nav.children.length) return;
+  MC.DRAWER.forEach(function (e) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "dentry";
+    b.dataset.go = e.id;
+    b.appendChild(MC.glyph(e.glyph, 18));
+    var t = document.createElement("span");
+    t.textContent = e.label;
+    b.appendChild(t);
+    var here = document.createElement("span");
+    here.className = "here";
+    here.textContent = "Here";
+    here.hidden = true;
+    b.appendChild(here);
+    if (e.soon) {
+      b.setAttribute("aria-disabled", "true");
+      var soon = document.createElement("span");
+      soon.className = "soon";
+      var sid = "soon-" + e.id;
+      soon.id = sid;
+      soon.textContent = "Coming soon";
+      b.appendChild(soon);
+      b.setAttribute("aria-describedby", sid);
     }
-    ab(worn ? "Worn" : "Wear", "Take this up", function () { MC.act.doEquip(g.uid); }, worn);
-    ab(maxed ? "Perfected" : "Reforge", maxed ? "No further" : "Iron " + cost.ore + ", timber " + cost.wood,
-      function () { MC.act.upgradeGear(g.uid); }, maxed || !affordUp);
-    ab("Sell " + MC.fmt(MC.sellPrice(g)), "For gold, unworn only",
-      function () { MC.act.sellGear(g.uid); }, worn);
-    d.appendChild(row);
-    R.gearCards.appendChild(d);
-  })(S.gear[gi]);
-
-  R.foes.textContent = "";
-  MC.FOES.forEach(function (f, i) {
-    R.foes.appendChild(MC.tile({ glyph: "fist", title: f.t,
-      stat: "HP " + MC.fmt(f.hp) + " · ATK " + MC.fmt(f.atk) + " · +" + MC.fmt(f.cult),
-      btn: "Fight", tip: "Open battle", cb: function () { MC.act.doFight(i, false); } }));
+    b.addEventListener("click", function () { MC.drawerGo(e.id); });
+    nav.appendChild(b);
   });
-
-  R.bosses.textContent = "";
-  MC.BOSSES.forEach(function (b, i) {
-    var sl = S.bosses.includes(b.id), lk = S.realm < b.realm;
-    R.bosses.appendChild(MC.tile({ glyph: "flame", title: b.t,
-      stat: (sl ? "Fallen. " : lk ? "Sealed until " + MC.REALMS[b.realm].n + ". " : "") +
-        "HP " + MC.fmt(b.hp) + " · ATK " + MC.fmt(b.atk),
-      cls: sl ? "" : (lk ? "locked" : "can"), btn: sl ? "Fallen" : "Challenge",
-      primary: !sl && !lk, tip: sl ? "Already slain" : lk ? "Beyond your present realm" : "A hard fight, richly paid",
-      disabled: sl || lk, why: sl ? "Already slain" : "Sealed until " + MC.REALMS[b.realm].n,
-      cb: function () { MC.act.doFight(i, true); } }));
-  });
-
-  R.towerBox.textContent = "";
-  var next = MC.towerFoe(S.tower + 1);
-  R.towerBox.appendChild(MC.tile({ glyph: "shield", title: "Floor " + MC.fmt(S.tower + 1),
-    stat: next.t + " · HP " + MC.fmt(next.hp) + " · ATK " + MC.fmt(next.atk) + " · +" + MC.fmt(next.cult) +
-      ((S.tower + 1) % 3 === 0 ? " · core" : ""),
-    btn: "Climb", primary: true, tip: "Face the next warden",
-    cb: function () { MC.act.climbTower(); } }));
-
-  MC.skills();
-  MC.character();
+};
+MC.updateDrawer = function () {
+  var btns = R.drawerNav ? R.drawerNav.querySelectorAll(".dentry") : [];
+  for (var i = 0; i < btns.length; i++) {
+    var here = btns[i].dataset.go === MC.screen;
+    btns[i].classList.toggle("here", here);
+    var h = btns[i].querySelector(".here");
+    if (h) h.hidden = !here;
+    if (here) btns[i].setAttribute("aria-current", "true");
+    else btns[i].removeAttribute("aria-current");
+  }
+};
+MC.setDrawer = function (open, opener) {
+  var dr = R.drawer, bd = R.drawerBackdrop;
+  if (!dr) return;
+  if (open) {
+    MC._drawerOpener = opener || document.activeElement;
+    MC.buildDrawer();
+    MC.updateDrawer();
+    dr.hidden = false;
+    bd.hidden = false;
+    requestAnimationFrame(function () { dr.classList.add("open"); });
+    var first = dr.querySelector(".dentry");
+    if (first) first.focus();
+    R.btnMenu.setAttribute("aria-expanded", "true");
+    R.btnMenuC.setAttribute("aria-expanded", "true");
+  } else {
+    dr.classList.remove("open");
+    dr.hidden = true;
+    bd.hidden = true;
+    R.btnMenu.setAttribute("aria-expanded", "false");
+    R.btnMenuC.setAttribute("aria-expanded", "false");
+    if (MC._drawerOpener && MC._drawerOpener.focus) MC._drawerOpener.focus();
+    MC._drawerOpener = null;
+  }
+};
+MC.drawerOpen = function () {
+  return R.drawer && !R.drawer.hidden;
+};
+MC.drawerGo = function (id) {
+  if (id === "lobby") { MC.openLobby(); MC.setDrawer(false); }
+  else if (id === "cultivate") { MC.openCultivate(); MC.setDrawer(false); }
+  else if (id === "settings") { MC.setDrawer(false); MC.openSettings(); }
+  else if (id === "help") { MC.setDrawer(false); MC.openHelp(); }
+  /* coming-soon entries: focusable, announced, never navigate */
+};
+MC.trapDrawer = function (e) {
+  if (e.key !== "Tab" || !MC.drawerOpen()) return;
+  var btns = R.drawerNav.querySelectorAll("button");
+  if (!btns.length) return;
+  var first = btns[0], last = btns[btns.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 };
 
-MC.skills = function () {
-  var sk = R.skills;
-  sk.textContent = "";
-  for (var pi = 0; pi < MC.PATHS.length; pi++) {
-    (function (p) {
-      var col = document.createElement("div");
-      col.className = "skillcol";
-      var h = document.createElement("h5");
-      h.textContent = p.t;
-      col.appendChild(h);
-      var chain = MC.SKILLS.filter(function (s) { return s.path === p.id; });
-      for (var i = 0; i < chain.length; i++) (function (s, idx) {
-        var learned = MC.has(s.id);
-        var locked = idx > 0 && !MC.has(chain[idx - 1].id);
-        var afford = s.cost.seeds ? S.seeds >= s.cost.seeds : S.stones >= s.cost.stones;
-        var b = document.createElement("button");
-        b.type = "button";
-        b.className = "node" + (learned ? " learned" : locked ? " locked" : (afford ? " avail" : ""));
-        b.dataset.skill = s.id;
-        var dot = document.createElement("span");
-        dot.className = "dot";
-        dot.setAttribute("aria-hidden", "true");
-        var nm = document.createElement("span");
-        nm.textContent = s.t;
-        b.appendChild(dot); b.appendChild(nm);
-        b.setAttribute("aria-label", s.t + (learned ? ", learned" : locked ? ", sealed: learn the step above first" : ", " + s.d));
-        b.addEventListener("click", function () { MC.selSkill = s.id; MC.skillDetail(); });
-        b.addEventListener("mouseenter", function () { MC.selSkill = s.id; MC.skillDetail(); });
-        col.appendChild(b);
-      })(chain[i], i);
-      sk.appendChild(col);
-    })(MC.PATHS[pi]);
-  }
-  MC.skillDetail();
-  MC.drawTree();
+/* ---- screen fns ---- */
+MC.openLobby = function () {
+  MC.showScreen("lobby");
+  MC.updateDrawer();
 };
-MC.selSkill = null;
-MC.skillDetail = function () {
-  var box = R.skillDetail;
-  var s = null;
-  for (var i = 0; i < MC.SKILLS.length; i++) if (MC.SKILLS[i].id === MC.selSkill) s = MC.SKILLS[i];
-  if (!s) { box.hidden = true; box.textContent = ""; return; }
-  var chain = MC.SKILLS.filter(function (x) { return x.path === s.path; });
-  var idx = -1;
-  for (var j = 0; j < chain.length; j++) if (chain[j].id === s.id) idx = j;
-  var learned = MC.has(s.id);
-  var locked = idx > 0 && !MC.has(chain[idx - 1].id);
-  var afford = s.cost.seeds ? S.seeds >= s.cost.seeds : S.stones >= s.cost.stones;
-  box.hidden = false;
-  box.textContent = "";
-  var h = document.createElement("b");
-  h.textContent = s.t + " — " + s.d + " ";
-  box.appendChild(h);
-  var c = document.createElement("span");
-  c.textContent = s.cost.seeds ? "Price: " + s.cost.seeds + " seeds (in hand " + S.seeds + ")."
-    : "Price: " + s.cost.stones + " stones (in hand " + S.stones + ").";
-  box.appendChild(c);
-  box.appendChild(document.createTextNode(" "));
-  var b = document.createElement("button");
-  b.type = "button";
-  b.className = "btn btn-small" + ((!learned && !locked && afford) ? " btn-primary" : "");
-  b.textContent = learned ? "Known" : "Learn";
-  b.disabled = learned || locked || !afford;
-  if (b.disabled) b.title = learned ? "Already learned" : locked ? "Learn the step above first" : "Price not in hand";
-  b.addEventListener("click", function () { MC.act.buySkill(s.id); });
-  box.appendChild(b);
-};
-MC.drawTree = function () {
-  var svg = R.treeLines;
-  if (!svg) return;
-  var host = R.skills;
-  var W = host.scrollWidth, H = host.scrollHeight;
-  if (!W || !H) return;
-  svg.setAttribute("width", W);
-  svg.setAttribute("height", H);
-  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
-  var hr = host.getBoundingClientRect();
-  var cols = host.querySelectorAll(".skillcol");
-  for (var i = 0; i < cols.length; i++) {
-    var nodes = cols[i].querySelectorAll(".node");
-    for (var j = 0; j + 1 < nodes.length; j++) {
-      var a = nodes[j].getBoundingClientRect(), b = nodes[j + 1].getBoundingClientRect();
-      var x = a.left - hr.left + 16;
-      svg.appendChild(MC.svgEl("line", { x1: x, y1: a.bottom - hr.top, x2: x, y2: b.top - hr.top,
-        stroke: "#b08d4f", "stroke-width": 1 }));
-    }
-  }
-};
-MC.portraitSVG = function (big) {
-  var s = big ? 72 : 48;
-  var svg = MC.svgEl("svg", { viewBox: "0 0 64 64", width: s, height: s, "aria-hidden": "true" });
-  svg.appendChild(MC.svgEl("rect", { x: 0, y: 0, width: 64, height: 64, fill: "#3a322a" }));
-  svg.appendChild(MC.svgEl("path", { d: "M32 58 L20 34 Q32 26 44 34 L32 58 Z", fill: "#efe7d3" }));
-  svg.appendChild(MC.svgEl("circle", { cx: 32, cy: 20, r: 9, fill: "#efe7d3" }));
-  if (S.path === "sword") svg.appendChild(MC.svgEl("line", { x1: 44, y1: 40, x2: 56, y2: 22, stroke: "#b08d4f", "stroke-width": 3 }));
-  if (S.path === "body") svg.appendChild(MC.svgEl("path", { d: "M32 58 L14 36 Q32 24 50 36 L32 58 Z", fill: "none", stroke: "#b08d4f", "stroke-width": 2 }));
-  if (S.path === "alchemy") svg.appendChild(MC.svgEl("circle", { cx: 46, cy: 44, r: 6, fill: "none", stroke: "#5fae86", "stroke-width": 2 }));
-  if (S.path === "talisman") {
-    svg.appendChild(MC.svgEl("rect", { x: 14, y: 34, width: 5, height: 12, fill: "#efe7d3" }));
-    svg.appendChild(MC.svgEl("rect", { x: 45, y: 34, width: 5, height: 12, fill: "#efe7d3" }));
-  }
-  return svg;
-};
-MC.character = function () {
-  function slot(id, g, bare) {
-    var el = $(id);
-    el.textContent = "";
-    var n = document.createElement("span");
-    n.className = "slotname";
-    n.textContent = bare.split(" ")[0] === "bare" || bare === "rags" || bare === "none"
-      ? ({ "bare hands": "Weapon", "rags": "Armor", "none": "Charm" })[bare] : bare;
-    var b = document.createElement("b");
-    b.textContent = g ? g.t + " · " + ((MC.RARITIES.find(function (r) { return r.id === g.rar; }) || {}).t || "common") + " +" + (g.lvl || 0) : bare;
-    el.appendChild(n); el.appendChild(b);
-  }
-  var w = null, a = null, ch = null;
-  for (var i = 0; i < S.gear.length; i++) {
-    if (S.gear[i].uid === S.equip.weapon) w = S.gear[i];
-    if (S.gear[i].uid === S.equip.armor) a = S.gear[i];
-    if (S.gear[i].uid === S.equip.charm) ch = S.gear[i];
-  }
-  slot("eqWeapon", w, "bare hands"); slot("eqArmor", a, "rags"); slot("eqCharm", ch, "none");
-  if (MC.snap.cpath !== S.path) {
-    MC.snap.cpath = S.path;
-    R.charSvg.textContent = "";
-    R.charSvg.appendChild(MC.portraitSVG(true));
-  }
-  MC.record(R.charStats, [
-    ["Attack", MC.fmt(MC.tAtk())], ["Defense", MC.fmt(MC.tDef())], ["Spirit", MC.fmt(MC.tSpi())],
-    ["Techniques", String(Object.keys(S.skills).length)],
-    ["Tyrants", S.bosses.length + "/" + MC.BOSSES.length]
-  ]);
-  MC.pouch(R.pouchChips);
-  var rb = R.rebirthBox;
-  rb.textContent = "";
-  var info = document.createElement("p");
-  info.textContent = "Deaths: " + MC.fmt(S.rebirths) + " · Seeds: " + MC.fmt(S.seeds) +
-    " · This life: " + MC.fmt(S.totalCult) + " = " + MC.seedsFor(S.totalCult) + " seeds. " +
-    (MC.canRebirth() ? "The soup is ready." : "The soup waits until " + MC.REALMS[MC.CONFIG.REBIRTH_MIN_REALM].n + ".");
-  rb.appendChild(info);
-  var btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn btn-small" + (MC.canRebirth() ? " btn-primary" : "");
-  btn.textContent = "Drink the soup, gain " + MC.seedsFor(S.totalCult) + " seeds";
-  btn.setAttribute("data-tip", "Begin again as a child. Skills, seeds and stones are kept; all else returns to dust.");
-  btn.disabled = !MC.canRebirth();
-  if (!MC.canRebirth()) btn.title = "Requires " + MC.REALMS[MC.CONFIG.REBIRTH_MIN_REALM].n;
-  btn.addEventListener("click", function () { MC.act.askRebirth(); });
-  rb.appendChild(btn);
-};
-MC.pouch = function (el) {
-  var sig = ["herb", "ore", "wood", "core", "pill", "bigpill"].map(function (k) { return S.inv[k]; }).join(",");
-  if (MC.snap[el.id + "p"] === sig) return;
-  MC.snap[el.id + "p"] = sig;
-  el.textContent = "";
-  var items = [["herb", "Herb "], ["ore", "Iron "], ["wood", "Timber "], ["core", "Cores "],
-    ["pill", "Qi pills "], ["bigpill", "Core pills "]];
-  for (var i = 0; i < items.length; i++) {
-    el.appendChild(MC.chip(items[i][0] === "pill" || items[i][0] === "bigpill" ? "flame" : items[i][0],
-      items[i][1] + MC.fmt(S.inv[items[i][0]]), null));
-  }
+MC.openCultivate = function () {
+  if (MC.paused) return;
+  MC.showScreen("cultivate");
+  MC.renderAvatar({ pose: "meditate", door: Date.now() < S.doorUntil, realm: S.realm, path: S.path });
+  MC.tipProgress("open");
+  MC.updateDrawer();
+  MC.renderAll();
 };
 
-/* ---- the stage lives in stage.js ---- */
+/* ---- the living scene behind both screens ---- */
 MC.updateScene = function () { MC.syncStage(); };
 MC.renderAll = function () {
   MC.updateStatus();
@@ -860,6 +505,21 @@ MC.drawPaths = function () {
     row.appendChild(d);
   });
 };
+MC.portraitSVG = function (big) {
+  var s = big ? 72 : 48;
+  var svg = MC.svgEl("svg", { viewBox: "0 0 64 64", width: s, height: s, "aria-hidden": "true" });
+  svg.appendChild(MC.svgEl("rect", { x: 0, y: 0, width: 64, height: 64, fill: "#3a322a" }));
+  svg.appendChild(MC.svgEl("path", { d: "M32 58 L20 34 Q32 26 44 34 L32 58 Z", fill: "#efe7d3" }));
+  svg.appendChild(MC.svgEl("circle", { cx: 32, cy: 20, r: 9, fill: "#efe7d3" }));
+  if (S.path === "sword") svg.appendChild(MC.svgEl("line", { x1: 44, y1: 40, x2: 56, y2: 22, stroke: "#b08d4f", "stroke-width": 3 }));
+  if (S.path === "body") svg.appendChild(MC.svgEl("path", { d: "M32 58 L14 36 Q32 24 50 36 L32 58 Z", fill: "none", stroke: "#b08d4f", "stroke-width": 2 }));
+  if (S.path === "alchemy") svg.appendChild(MC.svgEl("circle", { cx: 46, cy: 44, r: 6, fill: "none", stroke: "#5fae86", "stroke-width": 2 }));
+  if (S.path === "talisman") {
+    svg.appendChild(MC.svgEl("rect", { x: 14, y: 34, width: 5, height: 12, fill: "#efe7d3" }));
+    svg.appendChild(MC.svgEl("rect", { x: 45, y: 34, width: 5, height: 12, fill: "#efe7d3" }));
+  }
+  return svg;
+};
 
 /* ---- modal with focus trap, restore, scroll lock ---- */
 MC._lastFocus = null;
@@ -907,7 +567,7 @@ MC.trapTab = function (e) {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 };
 
-/* ---- settings + help, opened from the HUD ---- */
+/* ---- settings + help ---- */
 MC.openSettings = function () {
   var wrap = document.createElement("div");
   function h(t) {
@@ -1036,6 +696,14 @@ MC.openSettings = function () {
   wrap.appendChild(dr);
   MC.showModal("Settings", [wrap], [{ t: "Done", primary: true }]);
 };
+MC.HELP = [
+  "This is the lobby: one plate, three bars, one button.",
+  "The III menu holds every section; most open in later tales.",
+  "Cultivate fills the measure on its own; breakthroughs carry you up.",
+  "Gathering, forging and fighting continue underneath, unattended.",
+  "Space repeats the one action before you; Escape closes all doors.",
+  "At Dao Ascension you may be reborn, and begin again further."
+];
 MC.openHelp = function () {
   MC.showModal("How the mountain works", MC.HELP, [{ t: "Return", primary: true }]);
 };

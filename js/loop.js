@@ -74,7 +74,6 @@ MC.startLoop = function () {
 MC.cacheDom();
 MC.bindAll();
 MC.applyUI();
-MC.buildStage($("stageMount"));
 if (S.started) {
   $("inName").value = S.name || "";
   var c = $("btnContinue");
