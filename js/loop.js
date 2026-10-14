@@ -61,13 +61,13 @@ MC.startLoop = function () {
     }
     if (acc >= 1) acc = 0; // shed absurd backlog; the offline reckoning covers real absence
     saveAcc += dt;
-    if (saveAcc >= (S.settings.autosaveSec || MC.CONFIG.AUTOSAVE_SEC)) { saveAcc = 0; MC.writeStore(); }
+    if (saveAcc >= (S.settings.autosaveSec || MC.CONFIG.AUTOSAVE_SEC)) { saveAcc = 0; MC.autoSave(); }
     MC.updateStatus();
     MC.updateRates();
     MC.updateLists();
     MC.updateScene();
   }, MC.CONFIG.LOOP_MS);
-  window.addEventListener("beforeunload", function () { if (S.started) MC.writeStore(); });
+  window.addEventListener("beforeunload", function () { if (S.started && !MC._wiped && !MC.yieldToStorage()) MC.writeStore(); });
 };
 
 // ---- boot ----
@@ -85,7 +85,7 @@ if (S.started) {
   MC.selPath = S.path;
   $("pathNameEcho").textContent = S.name;
   MC.drawPaths();
-  /* Returning to earned gains skips the title page: the reckoning is
+  /* Returning to earned gains skips the title screen: the reckoning is
      shown once, on load, as specified. */
   if (MC.pendingOffline) MC.act.enterMain();
 } else {

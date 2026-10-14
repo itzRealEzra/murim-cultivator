@@ -1,4 +1,4 @@
-/* Murim Cultivator — actions and screen flow.
+/* Murim Cultivator v3-phase4 — actions and screen flow.
    Every handler writes S (never the DOM) and marks lists dirty when
    list data changed. Rules and numbers are untouched. One-line event
    emits let the stage answer; behavior never branches on them. */
@@ -238,7 +238,7 @@ MC.act.climbTower = function () {
   MC.battle = { f: f, hp: f.hp, max: f.hp, boss: false, tower: true, rounds: 0 };
   MC.log("Floor " + MC.fmt(S.tower + 1) + ": " + f.t + " (" + MC.fmt(f.hp) + " health).", "", "combat");
   MC.emit("foe", { foe: f, boss: false });
-  MC.showMenu("fight");
+  MC.flashPanel("fight");
   MC.updateStatus(); MC.updateScene();
 };
 
@@ -364,8 +364,6 @@ MC.act.enterMain = function () {
   MC.applyUI();
   MC.syncSettingsUI();
   MC.show("screen-main");
-  var last = S.ui.panel;
-  MC.showMenu(document.getElementById("m-" + last) ? last : "cult");
   MC.buildPortraits();
   MC.markListsDirty();
   MC.renderAll();
@@ -412,20 +410,6 @@ MC.act.beginFromPath = function () {
   } else go();
 };
 
-/* ---- journal drawer (tablet/phone) ---- */
-MC.railShade = null;
-MC.setRail = function (open) {
-  document.body.classList.toggle("rail-open", open);
-  if (open) {
-    if (!MC.railShade) {
-      MC.railShade = document.createElement("div");
-      MC.railShade.className = "railshade";
-      MC.railShade.addEventListener("click", function () { MC.setRail(false); });
-      document.getElementById("app").appendChild(MC.railShade);
-    }
-  } else if (MC.railShade && MC.railShade.isConnected) MC.railShade.remove();
-};
-
 MC.HELP = [
   "Cultivation fills on its own; breakthroughs carry you upward.",
   "Gathering fills the pouch; the forge turns it into arms.",
@@ -437,16 +421,12 @@ MC.HELP = [
 
 /* ---- bindings ---- */
 MC.bindAll = function () {
-  for (var t = 0; t < R.tabs.length; t++) (function (b) {
-    b.addEventListener("click", function () { MC.showMenu(b.dataset.m); });
-  })(R.tabs[t]);
   document.addEventListener("keydown", function (e) {
     MC.trapTab(e);
     if (R.modalOverlay.classList.contains("open")) {
       if (e.key === "Escape") MC.hideModal();
       return;
     }
-    if (document.body.classList.contains("rail-open") && e.key === "Escape") { MC.setRail(false); return; }
     var typing = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
     if ($("screen-path").classList.contains("active") && !typing) {
       var pick = { 1: 0, 2: 1, 3: 2, 4: 3 }[e.key];
@@ -459,8 +439,6 @@ MC.bindAll = function () {
       return;
     }
     if (!$("screen-main").classList.contains("active") || typing) return;
-    var map = { 1: "cult", 2: "gather", 3: "forge", 4: "fight", 5: "boss", 6: "skills", 7: "char", 8: "settings" };
-    if (map[e.key]) { MC.showMenu(map[e.key]); return; }
     var k = e.key.toLowerCase();
     if (k === " ") { e.preventDefault(); MC.act.primary(); }
     else if (k === "q") {
@@ -520,16 +498,29 @@ MC.bindAll = function () {
   R.actPill.addEventListener("click", MC.act.takePill);
   R.actFlee.addEventListener("click", MC.act.flee);
 
-  /* unattended-work switches */
-  var bools = [["optCult", "autoCult"], ["optBreak", "autoBreak"], ["optGather", "autoGather"],
-    ["optFight", "autoFight"], ["optHeal", "autoHeal"], ["optTower", "autoTower"]];
-  for (var b = 0; b < bools.length; b++) (function (id, key) {
+  /* cultivate panel */
+  R.btnMed2.addEventListener("click", MC.act.meditate);
+  R.btnBreak2.addEventListener("click", function () { MC.act.tryBreak(true); });
+  R.btnDoor2.addEventListener("click", MC.act.closedDoor);
+
+  /* unattended-work switches; twins stay in step */
+  var bools = [["optCult", "autoCult", "optCult2"], ["optBreak", "autoBreak", "optBreak2"],
+    ["optGather", "autoGather", "optGather2"], ["optFight", "autoFight", null],
+    ["optHeal", "autoHeal", null], ["optTower", "autoTower", null]];
+  for (var b = 0; b < bools.length; b++) (function (id, key, twin) {
     $(id).addEventListener("change", function (e) {
       S.settings[key] = e.target.checked;
       MC.syncSwitch(e.target, e.target.checked);
+      if (twin) MC.syncSwitch($(twin), e.target.checked);
       MC.markListsDirty(); MC.renderAll(); MC.writeStore();
     });
-  })(bools[b][0], bools[b][1]);
+    if (twin) $(twin).addEventListener("change", function (e) {
+      S.settings[key] = e.target.checked;
+      MC.syncSwitch(e.target, e.target.checked);
+      MC.syncSwitch($(id), e.target.checked);
+      MC.markListsDirty(); MC.renderAll(); MC.writeStore();
+    });
+  })(bools[b][0], bools[b][1], bools[b][2]);
   var fr = document.querySelectorAll('input[name="focus"]');
   for (var f = 0; f < fr.length; f++) {
     fr[f].addEventListener("change", function (e) {
@@ -545,52 +536,16 @@ MC.bindAll = function () {
     MC.updateStatus();
   });
   $("btnHelp").addEventListener("click", function () { MC.showModal("How the mountain works", MC.HELP, [{ t: "Return", primary: true }]); });
-  $("btnJournal").addEventListener("click", function () { MC.setRail(true); });
-  R.goalStrip.addEventListener("click", function () { MC.showMenu(MC._goalPanel || "cult"); });
+  $("btnSettings").addEventListener("click", function () { MC.openSettings(); });
+  R.goalStrip.addEventListener("click", function () { MC.flashPanel(MC._goalPanel || "cult"); });
 
-  /* settings */
-  $("setTheme").addEventListener("change", function (e) { S.ui.theme = e.target.value; MC.applyUI(); MC.writeStore(); });
-  $("setText").addEventListener("change", function (e) { S.ui.textSize = e.target.value; MC.applyUI(); MC.writeStore(); });
-  $("setSound").addEventListener("change", function (e) { S.ui.sound = e.target.checked; MC.syncSwitch(e.target, e.target.checked); MC.writeStore(); });
-  $("setMotion").addEventListener("change", function (e) { S.ui.reduceMotion = e.target.checked; MC.applyUI(); MC.syncSwitch(e.target, e.target.checked); MC.writeStore(); });
+  /* chronicle filter */
   document.querySelectorAll(".filters button[data-f]").forEach(function (x) {
     x.addEventListener("click", function () {
       S.ui.logFilter = x.dataset.f;
       MC.writeStore();
       MC.applyFilter();
     });
-  });
-
-  /* record */
-  $("btnSave").addEventListener("click", function () {
-    MC.writeStore();
-    $("saveMsg").textContent = "Recorded " + new Date().toLocaleTimeString() + ".";
-  });
-  $("btnExp").addEventListener("click", function () {
-    var s = MC.exportSave();
-    $("saveBox").value = s;
-    $("saveBox").select();
-    try { document.execCommand("copy"); } catch (e) {}
-    if (navigator.clipboard) navigator.clipboard.writeText(s).catch(function () {});
-    $("saveMsg").textContent = "Copied to the box and the clipboard.";
-  });
-  $("btnImp").addEventListener("click", function () {
-    try {
-      MC.importSave($("saveBox").value);
-      MC.selPath = S.path;
-      MC.battle = null;
-      MC.applyUI();
-      MC.act.enterMain();
-      MC.log("The brought record is accepted.", "rich", "sys");
-    } catch (e) { $("saveMsg").textContent = "Not a record; nothing changed."; }
-  });
-  $("wipeWord").addEventListener("input", function (e) {
-    $("btnWipe").disabled = e.target.value.trim() !== "RESET";
-  });
-  $("btnWipe").addEventListener("click", function () {
-    if ($("wipeWord").value.trim() !== "RESET") return;
-    try { localStorage.removeItem(MC.CONFIG.SAVE_KEY); } catch (e) {}
-    location.reload();
   });
   $("btnClear").addEventListener("click", function () {
     R.log.textContent = "";

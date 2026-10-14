@@ -99,13 +99,50 @@ MC.readStore = function () {
   try {
     var r = localStorage.getItem(MC.CONFIG.SAVE_KEY);
     if (!r) return MC.DEFAULT();
+    MC._lastWritten = r; // seed: anything else on the shelf later is foreign
     return MC.migrate(JSON.parse(r));
   } catch (e) { return MC.DEFAULT(); }
 };
 
 MC.writeStore = function () {
   S.lastSeen = Date.now();
-  try { localStorage.setItem(MC.CONFIG.SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+  try {
+    var raw = JSON.stringify(S);
+    localStorage.setItem(MC.CONFIG.SAVE_KEY, raw);
+    MC._lastWritten = raw;
+  } catch (e) {}
+  MC._savedJSON = MC.snapSave();
+};
+/* Autosave writes only when something actually changed, so an outside
+   edit to the stored record is never paved over by a stale tick. */
+MC._savedJSON = null;
+MC._wiped = false;
+MC.snapSave = function () {
+  var t = S.lastSeen;
+  S.lastSeen = 0;
+  var j = "";
+  try { j = JSON.stringify(S); } catch (e) {}
+  S.lastSeen = t;
+  return j;
+};
+MC.autoSave = function () {
+  if (MC.yieldToStorage()) return; // a hand on the shelf: reload first
+  if (MC.snapSave() !== MC._savedJSON) MC.writeStore();
+};
+/* True when someone else wrote the shelf since our last write: yield
+   so a hand edit (or a synthetic test record) survives the reload. */
+MC._lastWritten = null;
+MC.yieldToStorage = function () {
+  var raw = null;
+  try { raw = localStorage.getItem(MC.CONFIG.SAVE_KEY); } catch (e) { return false; }
+  if (!raw) return false;
+  if (MC._lastWritten == null) {
+    try {
+      var stored = JSON.parse(raw);
+      return typeof stored.lastSeen === "number" && stored.lastSeen < S.lastSeen - 1000;
+    } catch (e) { return false; }
+  }
+  return raw !== MC._lastWritten;
 };
 
 /* Offline gains use the same live formulas, gated by the player's own
