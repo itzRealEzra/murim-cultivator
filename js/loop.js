@@ -85,6 +85,9 @@ if (S.started) {
   MC.selPath = S.path;
   $("pathNameEcho").textContent = S.name;
   MC.drawPaths();
+  /* Returning to earned gains skips the title page: the reckoning is
+     shown once, on load, as specified. */
+  if (MC.pendingOffline) MC.act.enterMain();
 } else {
   $("btnContinue").hidden = true;
   MC.drawPaths();
